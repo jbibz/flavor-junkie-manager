@@ -17,7 +17,6 @@ RUN npm ci --only=production && npm cache clean --force
 
 COPY --from=frontend-builder /app/dist ./dist
 COPY server ./server
-COPY supabase ./supabase
 
 EXPOSE 3001
 
