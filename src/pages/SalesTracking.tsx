@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Loader2, X, Edit2 } from 'lucide-react';
 import { useSalesEvents } from '../lib/hooks';
-import { supabase } from '../lib/supabase';
 import type { SalesEvent } from '../lib/database.types';
 import type { ToastType } from '../components/Toast';
 import AddSaleModal from '../components/AddSaleModal';

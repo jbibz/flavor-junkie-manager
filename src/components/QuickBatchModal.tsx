@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Loader2 } from 'lucide-react';
 import { useProducts, useComponents } from '../lib/hooks';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 interface QuickBatchModalProps {
   onClose: () => void;
@@ -59,24 +59,7 @@ export default function QuickBatchModal({ onClose, onSuccess }: QuickBatchModalP
     }
 
     try {
-      await supabase.from('products').update({
-        current_stock: product.current_stock + desired,
-        updated_at: new Date().toISOString()
-      }).eq('id', product.id);
-
-      await supabase.from('components').update({
-        quantity: lidComponent.quantity - desired,
-        total_value: (lidComponent.quantity - desired) * lidComponent.average_cost,
-        updated_at: new Date().toISOString()
-      }).eq('id', lidComponent.id);
-
-      await supabase.from('components').update({
-        quantity: bottleComponent.quantity - desired,
-        total_value: (bottleComponent.quantity - desired) * bottleComponent.average_cost,
-        updated_at: new Date().toISOString()
-      }).eq('id', bottleComponent.id);
-
-      await supabase.from('production_history').insert({
+      await api.production.create({
         production_date: new Date().toISOString().split('T')[0],
         product_id: product.id,
         product_name: `${product.name} (${product.size})`,
@@ -84,7 +67,20 @@ export default function QuickBatchModal({ onClose, onSuccess }: QuickBatchModalP
         components_used: {
           lids: `${lidKey}: ${desired}`,
           bottles: `${bottleKey}: ${desired}`
-        }
+        },
+        notes: ''
+      });
+
+      await api.components.update(lidComponent.id, {
+        quantity: lidComponent.quantity - desired,
+        average_cost: lidComponent.average_cost,
+        total_value: (lidComponent.quantity - desired) * lidComponent.average_cost
+      });
+
+      await api.components.update(bottleComponent.id, {
+        quantity: bottleComponent.quantity - desired,
+        average_cost: bottleComponent.average_cost,
+        total_value: (bottleComponent.quantity - desired) * bottleComponent.average_cost
       });
 
       onSuccess(`Created ${desired} units of ${product.name}`);

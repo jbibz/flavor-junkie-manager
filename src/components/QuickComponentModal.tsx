@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ShoppingCart, Loader2 } from 'lucide-react';
 import { useComponents } from '../lib/hooks';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 interface QuickComponentModalProps {
   onClose: () => void;
@@ -48,19 +48,9 @@ export default function QuickComponentModal({ onClose, onSuccess }: QuickCompone
     const newTotalValue = newQty * newAvgCost;
 
     try {
-      await supabase.from('components').update({
-        quantity: newQty,
-        average_cost: newAvgCost,
-        total_value: newTotalValue,
-        updated_at: new Date().toISOString()
-      }).eq('id', selectedComponent.id);
-
-      await supabase.from('component_purchases').insert({
-        component_id: selectedComponent.id,
-        purchase_date: new Date().toISOString().split('T')[0],
+      await api.components.addPurchase(selectedComponent.id, {
         quantity: qty,
-        total_paid: paid,
-        cost_per_unit: costPerUnitValue
+        total_paid: paid
       });
 
       const name = selectedComponent.type.charAt(0).toUpperCase() + selectedComponent.type.slice(1);

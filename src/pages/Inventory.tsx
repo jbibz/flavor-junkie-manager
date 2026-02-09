@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, AlertTriangle, CheckCircle, Package, Loader2 } from 'lucide-react';
 import { useProducts, useComponents } from '../lib/hooks';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { Component } from '../lib/database.types';
 import ComponentPurchaseModal from '../components/ComponentPurchaseModal';
 
@@ -35,26 +35,9 @@ export default function Inventory({ onProductClick }: InventoryProps) {
   async function handlePurchase(quantity: number, totalPaid: number) {
     if (!selectedComponent) return;
 
-    const costPerUnit = totalPaid / quantity;
-    const oldQty = selectedComponent.quantity;
-    const oldCost = selectedComponent.average_cost;
-    const newQty = oldQty + quantity;
-    const newAvgCost = (oldQty * oldCost + quantity * costPerUnit) / newQty;
-    const newTotalValue = newQty * newAvgCost;
-
-    await supabase.from('components').update({
-      quantity: newQty,
-      average_cost: newAvgCost,
-      total_value: newTotalValue,
-      updated_at: new Date().toISOString()
-    }).eq('id', selectedComponent.id);
-
-    await supabase.from('component_purchases').insert({
-      component_id: selectedComponent.id,
-      purchase_date: new Date().toISOString().split('T')[0],
+    await api.components.addPurchase(selectedComponent.id, {
       quantity,
-      total_paid: totalPaid,
-      cost_per_unit: costPerUnit
+      total_paid: totalPaid
     });
 
     reloadComponents();

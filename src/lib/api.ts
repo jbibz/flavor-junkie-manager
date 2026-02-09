@@ -48,4 +48,10 @@ export const api = {
     createNotes: (content: string) => fetchAPI('/dashboard/notes', { method: 'POST', body: JSON.stringify({ content }) }),
     updateNotes: (id: string, content: string) => fetchAPI(`/dashboard/notes/${id}`, { method: 'PUT', body: JSON.stringify({ content }) }),
   },
+  components: {
+    getAll: () => fetchAPI('/components'),
+    getOne: (id: string) => fetchAPI(`/components/${id}`),
+    update: (id: string, data: any) => fetchAPI(`/components/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    addPurchase: (id: string, data: any) => fetchAPI(`/components/${id}/purchases`, { method: 'POST', body: JSON.stringify(data) }),
+  },
 };

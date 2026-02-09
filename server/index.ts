@@ -7,6 +7,7 @@ import productsRouter from './routes/products';
 import salesRouter from './routes/sales';
 import productionRouter from './routes/production';
 import dashboardRouter from './routes/dashboard';
+import componentsRouter from './routes/components';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/sales', salesRouter);
 app.use('/api/production', productionRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/components', componentsRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

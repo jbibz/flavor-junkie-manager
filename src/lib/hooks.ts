@@ -33,7 +33,8 @@ export function useComponents() {
 
   async function loadComponents() {
     try {
-      setComponents([]);
+      const data = await api.components.getAll();
+      if (data) setComponents(data);
     } catch (error) {
       console.error('Error loading components:', error);
     }

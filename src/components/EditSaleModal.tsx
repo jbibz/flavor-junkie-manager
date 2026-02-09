@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Edit2, Loader2, Trash2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { SalesEvent } from '../lib/database.types';
 
 interface SaleItem {
@@ -39,22 +39,22 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
   }, []);
 
   async function loadItems() {
-    const { data } = await supabase
-      .from('sales_items')
-      .select('*')
-      .eq('sales_event_id', event.id);
-
-    if (data) {
-      setItems(data.map(item => ({
-        id: item.id,
-        productId: item.product_id,
-        productName: item.product_name,
-        startingStock: item.starting_stock,
-        endingStock: item.ending_stock,
-        quantitySold: item.quantity_sold,
-        unitPrice: item.unit_price,
-        subtotal: item.subtotal
-      })));
+    try {
+      const response = await api.sales.getEvent(event.id);
+      if (response && response.items) {
+        setItems(response.items.map(item => ({
+          id: item.id,
+          productId: item.product_id,
+          productName: item.product_name,
+          startingStock: item.starting_stock,
+          endingStock: item.ending_stock,
+          quantitySold: item.quantity_sold,
+          unitPrice: item.unit_price,
+          subtotal: item.subtotal
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading sales items:', error);
     }
     setLoading(false);
   }
@@ -81,58 +81,33 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
 
   async function handleSave() {
     setSaving(true);
-    const totalRevenue = items.reduce((sum, item) => sum + item.subtotal, 0);
-
-    await supabase
-      .from('sales_events')
-      .update({
+    try {
+      await api.sales.updateEvent(event.id, {
+        market_name: eventName,
         event_date: eventDate,
-        event_name: eventName,
-        notes,
-        total_revenue: totalRevenue,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', event.id);
-
-    for (const item of items) {
-      await supabase
-        .from('sales_items')
-        .update({
-          starting_stock: item.startingStock,
-          ending_stock: item.endingStock ?? item.startingStock,
+        items: items.map(item => ({
+          product_id: item.productId,
+          product_name: item.productName,
           quantity_sold: item.quantitySold,
-          subtotal: item.subtotal
-        })
-        .eq('id', item.id);
-
-      if (item.endingStock !== null) {
-        await supabase
-          .from('products')
-          .update({
-            current_stock: item.endingStock,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', item.productId);
-      }
+          price_per_unit: item.unitPrice
+        }))
+      });
+      onSave();
+    } catch (error) {
+      console.error('Error saving sales event:', error);
+      setSaving(false);
     }
-
-    onSave();
   }
 
   async function handleDelete() {
     setDeleting(true);
-
-    await supabase
-      .from('sales_items')
-      .delete()
-      .eq('sales_event_id', event.id);
-
-    await supabase
-      .from('sales_events')
-      .delete()
-      .eq('id', event.id);
-
-    onSave();
+    try {
+      await api.sales.deleteEvent(event.id);
+      onSave();
+    } catch (error) {
+      console.error('Error deleting sales event:', error);
+      setDeleting(false);
+    }
   }
 
   const totalRevenue = items.reduce((sum, item) => sum + item.subtotal, 0);

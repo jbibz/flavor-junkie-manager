@@ -17,7 +17,6 @@
     "db:reset": "docker compose down -v && docker compose up -d"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import type { ProductionHistory } from '../lib/database.types';
 
 interface EditProductionModalProps {

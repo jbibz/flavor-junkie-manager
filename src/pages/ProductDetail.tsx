@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2 } from 'lucide-react';
 import { useProduct, useComponents, useProductionHistory } from '../lib/hooks';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import type { RecipeIngredient } from '../lib/database.types';
 import type { ToastType } from '../components/Toast';
 import UnitToggle from '../components/UnitToggle';
@@ -73,30 +73,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
     }
 
     try {
-      await supabase.from('products').update({
-        current_stock: product.current_stock + desired,
-        updated_at: new Date().toISOString()
-      }).eq('id', product.id);
-
-      await supabase.from('components').update({
-        quantity: lidComponent.quantity - desired,
-        total_value: (lidComponent.quantity - desired) * lidComponent.average_cost,
-        updated_at: new Date().toISOString()
-      }).eq('id', lidComponent.id);
-
-      await supabase.from('components').update({
-        quantity: bottleComponent.quantity - desired,
-        total_value: (bottleComponent.quantity - desired) * bottleComponent.average_cost,
-        updated_at: new Date().toISOString()
-      }).eq('id', bottleComponent.id);
-
-      await supabase.from('components').update({
-        quantity: labelComponent.quantity - desired,
-        total_value: (labelComponent.quantity - desired) * labelComponent.average_cost,
-        updated_at: new Date().toISOString()
-      }).eq('id', labelComponent.id);
-
-      await supabase.from('production_history').insert({
+      await api.production.create({
         production_date: new Date().toISOString().split('T')[0],
         product_id: product.id,
         product_name: `${product.name} (${product.size})`,
@@ -105,7 +82,26 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
           lids: `${lidKey}: ${desired}`,
           bottles: `${bottleKey}: ${desired}`,
           labels: `${labelKey}: ${desired}`
-        }
+        },
+        notes: ''
+      });
+
+      await api.components.update(lidComponent.id, {
+        quantity: lidComponent.quantity - desired,
+        average_cost: lidComponent.average_cost,
+        total_value: (lidComponent.quantity - desired) * lidComponent.average_cost
+      });
+
+      await api.components.update(bottleComponent.id, {
+        quantity: bottleComponent.quantity - desired,
+        average_cost: bottleComponent.average_cost,
+        total_value: (bottleComponent.quantity - desired) * bottleComponent.average_cost
+      });
+
+      await api.components.update(labelComponent.id, {
+        quantity: labelComponent.quantity - desired,
+        average_cost: labelComponent.average_cost,
+        total_value: (labelComponent.quantity - desired) * labelComponent.average_cost
       });
 
       reloadHistory();
