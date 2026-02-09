@@ -22,4 +22,6 @@ EXPOSE 3001
 
 ENV NODE_ENV=production
 
+RUN npm install -g tsx
+
 CMD ["npm", "run", "server"]
