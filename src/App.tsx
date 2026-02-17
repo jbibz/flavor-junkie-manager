@@ -20,6 +20,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>();
   const [quickAction, setQuickAction] = useState<QuickAction>(null);
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -42,6 +43,7 @@ function App() {
 
   function handleQuickActionSuccess(message?: string) {
     setQuickAction(null);
+    setMobileActionsOpen(false);
     setRefreshKey(prev => prev + 1);
     if (message) {
       showToast('success', message);
@@ -75,18 +77,24 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+    <div className="min-h-screen bg-gray-50">
       <Header currentPage={currentPage} onNavigate={setCurrentPage} />
-      <main className="container mx-auto px-3 sm:px-4 pt-6 pb-24 md:py-6 md:pb-8 max-w-7xl">
+      <main className="container mx-auto px-3 sm:px-4 pt-4 pb-28 md:py-6 md:pb-8 max-w-7xl">
         {renderPage()}
       </main>
 
-      <BottomNav currentPage={currentPage} onNavigate={setCurrentPage} />
+      <BottomNav
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        onPlusPress={() => setMobileActionsOpen(true)}
+      />
 
       <FloatingActionButton
         onMakeBatch={() => setQuickAction('batch')}
         onAddComponents={() => setQuickAction('components')}
         onAddSale={() => setQuickAction('sale')}
+        mobileOpen={mobileActionsOpen}
+        onMobileClose={() => setMobileActionsOpen(false)}
       />
 
       {quickAction === 'batch' && (
