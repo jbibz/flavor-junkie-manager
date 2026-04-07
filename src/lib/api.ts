@@ -23,6 +23,7 @@ export const api = {
   products: {
     getAll: () => fetchAPI('/products'),
     getOne: (id: string) => fetchAPI(`/products/${id}`),
+    getRecipe: (id: string) => fetchAPI(`/products/${id}/recipe`),
     create: (data: any) => fetchAPI('/products', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => fetchAPI(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI(`/products/${id}`, { method: 'DELETE' }),

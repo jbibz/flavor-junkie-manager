@@ -55,9 +55,13 @@ export function useProduct(id: string | undefined) {
 
   async function loadProduct(productId: string) {
     try {
-      const data = await api.products.getOne(productId);
-      if (data) setProduct(data);
-      setRecipe(null);
+      const [productData, recipeData] = await Promise.all([
+        api.products.getOne(productId),
+        api.products.getRecipe(productId).catch(() => null),
+      ]);
+
+      if (productData) setProduct(productData);
+      setRecipe(recipeData);
     } catch (error) {
       console.error('Error loading product:', error);
     }
