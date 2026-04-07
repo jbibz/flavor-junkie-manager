@@ -17,6 +17,7 @@ export interface Database {
           name: string
           size: string
           current_stock: number
+          min_stock_level: number
           lid_color: string
           bottle_type: string
           price: number
@@ -29,6 +30,7 @@ export interface Database {
           name: string
           size: string
           current_stock?: number
+          min_stock_level?: number
           lid_color: string
           bottle_type: string
           price?: number
@@ -41,6 +43,7 @@ export interface Database {
           name?: string
           size?: string
           current_stock?: number
+          min_stock_level?: number
           lid_color?: string
           bottle_type?: string
           price?: number
