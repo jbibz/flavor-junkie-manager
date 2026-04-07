@@ -200,7 +200,7 @@ interface ComponentSectionProps {
 
 function ComponentSection({ title, items, expanded, onToggle, onPurchase }: ComponentSectionProps) {
   const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalValue = items.reduce((sum, item) => sum + item.total_value, 0);
+  const totalValue = items.reduce((sum, item) => sum + Number(item.total_value || 0), 0);
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -261,11 +261,11 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase }: Comp
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500">Unit Cost</span>
-                    <span className="font-semibold text-gray-900">${item.average_cost.toFixed(2)}</span>
+                    <span className="font-semibold text-gray-900">${Number(item.average_cost || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                     <span className="text-gray-500">Total Value</span>
-                    <span className="font-bold text-orange-600">${item.total_value.toFixed(2)}</span>
+                    <span className="font-bold text-orange-600">${Number(item.total_value || 0).toFixed(2)}</span>
                   </div>
                 </div>
 
