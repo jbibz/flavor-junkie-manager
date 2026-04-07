@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, AlertTriangle, CheckCircle, Package, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, AlertTriangle, CheckCircle, Package, Loader2, Edit3 } from 'lucide-react';
 import { useProducts, useComponents } from '../lib/hooks';
 import { api } from '../lib/api';
 import type { Component } from '../lib/database.types';
 import ComponentPurchaseModal from '../components/ComponentPurchaseModal';
+import EditComponentModal from '../components/EditComponentModal';
 
 interface InventoryProps {
   onProductClick: (productId: string) => void;
@@ -15,6 +16,7 @@ export default function Inventory({ onProductClick }: InventoryProps) {
   const [expandedSections, setExpandedSections] = useState<string[]>(['lids', 'bottles', 'labels']);
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [selectedComponent, setSelectedComponent] = useState<Component | null>(null);
+  const [editingComponent, setEditingComponent] = useState<Component | null>(null);
 
   function toggleSection(section: string) {
     setExpandedSections(prev =>
@@ -27,9 +29,17 @@ export default function Inventory({ onProductClick }: InventoryProps) {
     setPurchaseModalOpen(true);
   }
 
+  function openEditModal(component: Component) {
+    setEditingComponent(component);
+  }
+
   function closePurchaseModal() {
     setPurchaseModalOpen(false);
     setSelectedComponent(null);
+  }
+
+  function closeEditModal() {
+    setEditingComponent(null);
   }
 
   async function handlePurchase(quantity: number, totalPaid: number) {
@@ -42,6 +52,11 @@ export default function Inventory({ onProductClick }: InventoryProps) {
 
     reloadComponents();
     closePurchaseModal();
+  }
+
+  async function handleComponentUpdate(componentId: string, payload: ComponentUpdatePayload) {
+    await api.components.update(componentId, payload);
+    await reloadComponents();
   }
 
   const lids = components.filter(c => c.category === 'lids');
@@ -140,6 +155,7 @@ export default function Inventory({ onProductClick }: InventoryProps) {
             expanded={expandedSections.includes('lids')}
             onToggle={() => toggleSection('lids')}
             onPurchase={openPurchaseModal}
+            onEdit={openEditModal}
           />
 
           <ComponentSection
@@ -148,6 +164,7 @@ export default function Inventory({ onProductClick }: InventoryProps) {
             expanded={expandedSections.includes('bottles')}
             onToggle={() => toggleSection('bottles')}
             onPurchase={openPurchaseModal}
+            onEdit={openEditModal}
           />
 
           <ComponentSection
@@ -156,6 +173,7 @@ export default function Inventory({ onProductClick }: InventoryProps) {
             expanded={expandedSections.includes('labels')}
             onToggle={() => toggleSection('labels')}
             onPurchase={openPurchaseModal}
+            onEdit={openEditModal}
           />
         </div>
       </div>
@@ -167,9 +185,23 @@ export default function Inventory({ onProductClick }: InventoryProps) {
           onSave={handlePurchase}
         />
       )}
+
+      {editingComponent && (
+        <EditComponentModal
+          component={editingComponent}
+          onClose={closeEditModal}
+          onSave={(values) => handleComponentUpdate(editingComponent.id, values)}
+        />
+      )}
     </div>
   );
 }
+
+type ComponentUpdatePayload = {
+  quantity: number;
+  average_cost: number;
+  total_value: number;
+};
 
 interface StatCardProps {
   label: string;
@@ -196,9 +228,10 @@ interface ComponentSectionProps {
   expanded: boolean;
   onToggle: () => void;
   onPurchase: (component: Component) => void;
+  onEdit: (component: Component) => void;
 }
 
-function ComponentSection({ title, items, expanded, onToggle, onPurchase }: ComponentSectionProps) {
+function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit }: ComponentSectionProps) {
   const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalValue = items.reduce((sum, item) => sum + Number(item.total_value || 0), 0);
 
@@ -245,13 +278,22 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase }: Comp
                     </p>
                     <p className="text-xs text-gray-500">{title.slice(0, -1)}</p>
                   </div>
-                  <span className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded-full ${
-                    item.quantity < 50
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-green-100 text-green-700'
-                  }`}>
-                    {item.quantity < 50 ? 'Low' : 'Good'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded-full ${
+                      item.quantity < 50
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {item.quantity < 50 ? 'Low' : 'Good'}
+                    </span>
+                    <button
+                      onClick={() => onEdit(item)}
+                      className="p-2 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+                      aria-label={`Edit ${item.type.replace(/_/g, ' ')}`}
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2 mb-4 text-sm">
