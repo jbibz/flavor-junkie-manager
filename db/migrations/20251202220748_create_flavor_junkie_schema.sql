@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS products (
   name text NOT NULL,
   size text NOT NULL,
   current_stock integer NOT NULL DEFAULT 0,
+  min_stock_level integer NOT NULL DEFAULT 10,
   lid_color text NOT NULL,
   bottle_type text NOT NULL,
   price numeric(10,2) NOT NULL DEFAULT 0,
