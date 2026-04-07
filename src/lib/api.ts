@@ -1,4 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3033/api';
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? 'http://localhost:3033/api' : '/api');
 
 async function fetchAPI(endpoint: string, options?: RequestInit) {
   const response = await fetch(`${API_URL}${endpoint}`, {
@@ -21,6 +23,7 @@ export const api = {
   products: {
     getAll: () => fetchAPI('/products'),
     getOne: (id: string) => fetchAPI(`/products/${id}`),
+    getRecipe: (id: string) => fetchAPI(`/products/${id}/recipe`),
     create: (data: any) => fetchAPI('/products', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => fetchAPI(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetchAPI(`/products/${id}`, { method: 'DELETE' }),

@@ -3,15 +3,38 @@ import { query } from '../db';
 
 const router = Router();
 
+async function getLowStockCount() {
+  const columnCheck = await query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'products'
+        AND column_name = 'min_stock_level'
+    ) AS has_column`
+  );
+
+  const hasMinStockLevel = columnCheck.rows[0]?.has_column === true;
+
+  if (hasMinStockLevel) {
+    const lowStockResult = await query(
+      'SELECT COUNT(*) as count FROM products WHERE current_stock < COALESCE(min_stock_level, 0)'
+    );
+    return parseInt(lowStockResult.rows[0].count);
+  }
+
+  const fallbackLowStockResult = await query(
+    'SELECT COUNT(*) as count FROM products WHERE current_stock <= 10'
+  );
+  return parseInt(fallbackLowStockResult.rows[0].count);
+}
+
 router.get('/stats', async (req, res) => {
   try {
     const productsResult = await query('SELECT COUNT(*) as count FROM products');
     const totalProducts = parseInt(productsResult.rows[0].count);
 
-    const lowStockResult = await query(
-      'SELECT COUNT(*) as count FROM products WHERE current_stock < min_stock_level'
-    );
-    const lowStockItems = parseInt(lowStockResult.rows[0].count);
+    const lowStockItems = await getLowStockCount();
 
     const revenueResult = await query(
       'SELECT COALESCE(SUM(total_revenue), 0) as total FROM sales_events'
