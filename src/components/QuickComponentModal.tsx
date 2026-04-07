@@ -241,8 +241,8 @@ function ModalContent({
             </div>
             <div className="pt-2 border-t border-blue-200">
               <p className="text-xs text-gray-600">
-                Current avg: ${selectedComponent.average_cost.toFixed(2)} &rarr; New avg: $
-                {((selectedComponent.quantity * selectedComponent.average_cost + parseFloat(totalPaid || '0')) /
+                Current avg: ${asNumber(selectedComponent.average_cost).toFixed(2)} &rarr; New avg: $
+                {((selectedComponent.quantity * asNumber(selectedComponent.average_cost) + parseFloat(totalPaid || '0')) /
                   (selectedComponent.quantity + parseInt(quantity || '0'))).toFixed(2)}
               </p>
             </div>
@@ -281,4 +281,9 @@ function ModalContent({
       </div>
     </div>
   );
+}
+
+function asNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }

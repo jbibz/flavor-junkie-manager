@@ -140,7 +140,9 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
   const lidComponent = components.find(c => c.category === 'lids' && c.type === product.lid_color.toLowerCase());
   const bottleComponent = components.find(c => c.category === 'bottles' && c.type === product.bottle_type.toLowerCase());
 
-  const componentCost = (lidComponent?.average_cost || 0) + (bottleComponent?.average_cost || 0) + 0.30;
+  const lidAverageCost = asNumber(lidComponent?.average_cost);
+  const bottleAverageCost = asNumber(bottleComponent?.average_cost);
+  const componentCost = lidAverageCost + bottleAverageCost + 0.30;
   const ingredientCost = 1.50;
   const totalCost = componentCost + ingredientCost;
   const profitMargin = ((product.price - totalCost) / product.price) * 100;
@@ -326,11 +328,11 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Lid</span>
-                <span className="text-gray-900">${(lidComponent?.average_cost || 0).toFixed(2)}</span>
+                <span className="text-gray-900">${lidAverageCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Bottle</span>
-                <span className="text-gray-900">${(bottleComponent?.average_cost || 0).toFixed(2)}</span>
+                <span className="text-gray-900">${bottleAverageCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Label</span>
@@ -429,6 +431,11 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
       </div>
     </div>
   );
+}
+
+function asNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 interface CollapsibleSectionProps {
