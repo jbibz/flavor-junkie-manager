@@ -83,13 +83,17 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
     setSaving(true);
     try {
       await api.sales.updateEvent(event.id, {
-        market_name: eventName,
+        event_name: eventName,
         event_date: eventDate,
+        notes,
         items: items.map(item => ({
           product_id: item.productId,
           product_name: item.productName,
+          starting_stock: item.startingStock,
+          ending_stock: item.endingStock ?? item.startingStock,
           quantity_sold: item.quantitySold,
-          price_per_unit: item.unitPrice
+          price_per_unit: item.unitPrice,
+          subtotal: item.subtotal
         }))
       });
       onSave();

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Loader2, X, Edit2 } from 'lucide-react';
 import { useSalesEvents } from '../lib/hooks';
+import { api } from '../lib/api';
 import type { SalesEvent } from '../lib/database.types';
 import type { ToastType } from '../components/Toast';
 import AddSaleModal from '../components/AddSaleModal';
@@ -62,14 +63,17 @@ export default function SalesTracking({ showToast }: SalesTrackingProps) {
       return;
     }
 
-    const eventIds = events.map(e => e.id);
-    const { data: items } = await supabase
-      .from('sales_items')
-      .select('quantity_sold')
-      .in('sales_event_id', eventIds);
-
-    const units = items?.reduce((sum, item) => sum + item.quantity_sold, 0) || 0;
-    setTotalUnits(units);
+    try {
+      const items = await api.sales.getItems();
+      const eventIds = new Set(events.map(e => e.id));
+      const units = items
+        .filter((item: { sales_event_id: string; quantity_sold: number }) => eventIds.has(item.sales_event_id))
+        .reduce((sum: number, item: { quantity_sold: number }) => sum + item.quantity_sold, 0);
+      setTotalUnits(units);
+    } catch (error) {
+      console.error('Error loading month stats:', error);
+      setTotalUnits(0);
+    }
   }
 
   function previousMonth() {
@@ -367,12 +371,16 @@ function EventDetailsModal({ event, onClose, onEdit }: EventDetailsModalProps) {
   }, []);
 
   async function loadItems() {
-    const { data } = await supabase
-      .from('sales_items')
-      .select('*')
-      .eq('sales_event_id', event.id);
-    if (data) setItems(data);
-    setLoading(false);
+    try {
+      const response = await api.sales.getEvent(event.id);
+      if (response && response.items) {
+        setItems(response.items);
+      }
+    } catch (error) {
+      console.error('Error loading sales items:', error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const hasPendingItems = items.some(item => item.ending_stock === item.starting_stock && item.quantity_sold === 0);

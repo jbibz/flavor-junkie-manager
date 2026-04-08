@@ -45,25 +45,42 @@ router.post('/events', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { market_name, event_date, items } = req.body;
+    const {
+      event_name,
+      market_name,
+      event_date,
+      items,
+      notes
+    } = req.body;
+    const saleItems = Array.isArray(items) ? items : [];
+    const saleEventName = event_name || market_name || '';
 
     let totalRevenue = 0;
-    for (const item of items) {
+    for (const item of saleItems) {
       totalRevenue += item.quantity_sold * item.price_per_unit;
     }
 
     const eventResult = await client.query(
-      'INSERT INTO sales_events (market_name, event_date, total_revenue) VALUES ($1, $2, $3) RETURNING *',
-      [market_name, event_date, totalRevenue]
+      'INSERT INTO sales_events (event_name, event_date, total_revenue, notes) VALUES ($1, $2, $3, $4) RETURNING *',
+      [saleEventName, event_date, totalRevenue, notes || '']
     );
 
     const eventId = eventResult.rows[0].id;
 
-    for (const item of items) {
+    for (const item of saleItems) {
       const subtotal = item.quantity_sold * item.price_per_unit;
       await client.query(
-        'INSERT INTO sales_items (sales_event_id, product_id, product_name, quantity_sold, price_per_unit, subtotal) VALUES ($1, $2, $3, $4, $5, $6)',
-        [eventId, item.product_id, item.product_name, item.quantity_sold, item.price_per_unit, subtotal]
+        'INSERT INTO sales_items (sales_event_id, product_id, product_name, starting_stock, ending_stock, quantity_sold, unit_price, subtotal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [
+          eventId,
+          item.product_id,
+          item.product_name,
+          item.starting_stock ?? 0,
+          item.ending_stock ?? item.starting_stock ?? 0,
+          item.quantity_sold,
+          item.price_per_unit,
+          subtotal
+        ]
       );
 
       await client.query(
@@ -90,7 +107,15 @@ router.put('/events/:id', async (req, res) => {
     await client.query('BEGIN');
 
     const { id } = req.params;
-    const { market_name, event_date, items } = req.body;
+    const {
+      event_name,
+      market_name,
+      event_date,
+      items,
+      notes
+    } = req.body;
+    const saleItems = Array.isArray(items) ? items : [];
+    const saleEventName = event_name || market_name || '';
 
     const oldItemsResult = await client.query(
       'SELECT product_id, quantity_sold FROM sales_items WHERE sales_event_id = $1',
@@ -107,13 +132,13 @@ router.put('/events/:id', async (req, res) => {
     await client.query('DELETE FROM sales_items WHERE sales_event_id = $1', [id]);
 
     let totalRevenue = 0;
-    for (const item of items) {
+    for (const item of saleItems) {
       totalRevenue += item.quantity_sold * item.price_per_unit;
     }
 
     const eventResult = await client.query(
-      'UPDATE sales_events SET market_name = $1, event_date = $2, total_revenue = $3, updated_at = NOW() WHERE id = $4 RETURNING *',
-      [market_name, event_date, totalRevenue, id]
+      'UPDATE sales_events SET event_name = $1, event_date = $2, total_revenue = $3, notes = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
+      [saleEventName, event_date, totalRevenue, notes || '', id]
     );
 
     if (eventResult.rows.length === 0) {
@@ -121,11 +146,20 @@ router.put('/events/:id', async (req, res) => {
       return res.status(404).json({ error: 'Sales event not found' });
     }
 
-    for (const item of items) {
+    for (const item of saleItems) {
       const subtotal = item.quantity_sold * item.price_per_unit;
       await client.query(
-        'INSERT INTO sales_items (sales_event_id, product_id, product_name, quantity_sold, price_per_unit, subtotal) VALUES ($1, $2, $3, $4, $5, $6)',
-        [id, item.product_id, item.product_name, item.quantity_sold, item.price_per_unit, subtotal]
+        'INSERT INTO sales_items (sales_event_id, product_id, product_name, starting_stock, ending_stock, quantity_sold, unit_price, subtotal) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [
+          id,
+          item.product_id,
+          item.product_name,
+          item.starting_stock ?? 0,
+          item.ending_stock ?? item.starting_stock ?? 0,
+          item.quantity_sold,
+          item.price_per_unit,
+          subtotal
+        ]
       );
 
       await client.query(

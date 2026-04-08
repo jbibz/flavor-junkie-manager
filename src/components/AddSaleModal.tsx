@@ -82,13 +82,17 @@ export default function AddSaleModal({ onClose, onSave }: AddSaleModalProps) {
       const salesItems = itemsWithStock.map(item => ({
         product_id: item.productId,
         product_name: item.productName,
+        starting_stock: item.startingStock,
+        ending_stock: item.endingStock ?? item.startingStock,
         quantity_sold: item.quantitySold,
-        price_per_unit: item.unitPrice
+        price_per_unit: item.unitPrice,
+        subtotal: item.subtotal
       }));
 
       await api.sales.createEvent({
-        market_name: eventName,
+        event_name: eventName,
         event_date: eventDate,
+        notes,
         items: salesItems
       });
 
