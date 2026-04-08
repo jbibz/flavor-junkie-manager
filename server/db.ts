@@ -1,4 +1,8 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
+
+// PostgreSQL numeric columns come back as strings by default.
+// Parse them once here so the API returns real numbers to the frontend.
+types.setTypeParser(1700, (value) => parseFloat(value));
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',

@@ -142,10 +142,12 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
 
   const lidAverageCost = asNumber(lidComponent?.average_cost);
   const bottleAverageCost = asNumber(bottleComponent?.average_cost);
+  const productPrice = asNumber(product.price);
   const componentCost = lidAverageCost + bottleAverageCost + 0.30;
   const ingredientCost = 1.50;
   const totalCost = componentCost + ingredientCost;
-  const profitMargin = ((product.price - totalCost) / product.price) * 100;
+  const grossProfit = productPrice - totalCost;
+  const profitMargin = productPrice > 0 ? (grossProfit / productPrice) * 100 : 0;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -175,7 +177,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
             </div>
             <div className="bg-gray-50 rounded-xl p-4">
               <p className="text-xs sm:text-sm text-gray-500">Price</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">${product.price}</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">${productPrice.toFixed(2)}</p>
               <p className="text-xs text-gray-400">per unit</p>
             </div>
           </div>
@@ -315,7 +317,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
             {profitMargin.toFixed(1)}%
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            ${(product.price - totalCost).toFixed(2)} profit per unit
+            ${grossProfit.toFixed(2)} profit per unit
           </p>
         </div>
 
@@ -374,7 +376,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Selling Price</span>
-                <span className="text-gray-900">${product.price.toFixed(2)}</span>
+                <span className="text-gray-900">${productPrice.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Cost</span>
@@ -382,7 +384,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
               </div>
               <div className="flex justify-between font-semibold text-green-600 pt-2 border-t border-gray-100">
                 <span>Gross Profit</span>
-                <span>${(product.price - totalCost).toFixed(2)}</span>
+                <span>${grossProfit.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-semibold text-green-600">
                 <span>Margin</span>
