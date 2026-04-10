@@ -4,6 +4,7 @@ import pool from '../db';
 
 const router = Router();
 const shopifyStockSyncOnly = process.env.SHOPIFY_STOCK_SYNC_ONLY !== 'false';
+let shopifySchemaReady: Promise<void> | null = null;
 
 type ShopifyLineItem = {
   title?: string;
@@ -31,6 +32,54 @@ type ShopifyOrderEventRow = {
   payload: ShopifyOrderPayload | null;
 };
 
+async function ensureShopifySchema() {
+  if (!shopifySchemaReady) {
+    shopifySchemaReady = (async () => {
+      await pool.query(
+        `ALTER TABLE products
+         ADD COLUMN IF NOT EXISTS shopify_variant_id text,
+         ADD COLUMN IF NOT EXISTS shopify_sku text`
+      );
+
+      await pool.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_products_shopify_variant_id_unique
+         ON products(shopify_variant_id)
+         WHERE shopify_variant_id IS NOT NULL`
+      );
+
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_products_shopify_sku_lower
+         ON products(lower(shopify_sku))
+         WHERE shopify_sku IS NOT NULL`
+      );
+
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS shopify_order_events (
+           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+           shopify_order_id text NOT NULL UNIQUE,
+           shopify_webhook_id text,
+           sales_event_id uuid REFERENCES sales_events(id) ON DELETE SET NULL,
+           items_processed integer NOT NULL DEFAULT 0,
+           items_unmatched integer NOT NULL DEFAULT 0,
+           payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+           processed_at timestamptz,
+           created_at timestamptz NOT NULL DEFAULT now()
+         )`
+      );
+
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_shopify_order_events_created_at
+         ON shopify_order_events(created_at DESC)`
+      );
+    })().catch((error) => {
+      shopifySchemaReady = null;
+      throw error;
+    });
+  }
+
+  await shopifySchemaReady;
+}
+
 router.get('/sync-results', async (req, res) => {
   const limitParam = Number(req.query.limit);
   const limit = Number.isFinite(limitParam) && limitParam > 0
@@ -38,6 +87,8 @@ router.get('/sync-results', async (req, res) => {
     : 10;
 
   try {
+    await ensureShopifySchema();
+
     const result = await pool.query(
       `SELECT
          shopify_order_id,
@@ -110,6 +161,8 @@ router.get('/orders/by-sales-event/:salesEventId', async (req, res) => {
   const { salesEventId } = req.params;
 
   try {
+    await ensureShopifySchema();
+
     const result = await pool.query(
       `SELECT shopify_order_id, payload
        FROM shopify_order_events
@@ -196,6 +249,7 @@ router.post(
     const client = await pool.connect();
 
     try {
+      await ensureShopifySchema();
       await client.query('BEGIN');
 
       const eventInsert = await client.query(
