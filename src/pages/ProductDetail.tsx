@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2 } from 'lucide-react';
 import { useProduct, useComponents, useProductionHistory } from '../lib/hooks';
 import { api } from '../lib/api';
@@ -13,7 +13,7 @@ interface ProductDetailProps {
 }
 
 export default function ProductDetail({ productId, onBack, showToast }: ProductDetailProps) {
-  const { product, recipe, loading } = useProduct(productId);
+  const { product, recipe, loading, reload: reloadProduct } = useProduct(productId);
   const { components, reload: reloadComponents } = useComponents();
   const { history, reload: reloadHistory } = useProductionHistory(productId);
   const [desiredBottles, setDesiredBottles] = useState('');
@@ -21,8 +21,26 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
   const [expandedSections, setExpandedSections] = useState<string[]>(['margin']);
   const [makingBatch, setMakingBatch] = useState(false);
   const [showGrams, setShowGrams] = useState(true);
-  const [manualQuantities, setManualQuantities] = useState<Record<string, string>>({});
-  const [savingComponentId, setSavingComponentId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingIngredients, setEditingIngredients] = useState<RecipeIngredient[]>([]);
+  const [editingBatchSize, setEditingBatchSize] = useState('');
+  const [editingMaterialQuantities, setEditingMaterialQuantities] = useState<Record<string, string>>({});
+  const [savingEdits, setSavingEdits] = useState(false);
+
+  const ingredients = (recipe?.ingredients as unknown as RecipeIngredient[]) || [];
+
+  useEffect(() => {
+    if (!isEditing || !recipe) return;
+
+    setEditingIngredients(
+      (recipe.ingredients as unknown as RecipeIngredient[]).map((ingredient) => ({
+        name: ingredient.name,
+        amount: Number(ingredient.amount) || 0,
+        unit: ingredient.unit || 'g'
+      }))
+    );
+    setEditingBatchSize(String(recipe.original_batch_size || ''));
+  }, [isEditing, recipe]);
 
   if (loading || !product || !recipe) {
     return (
@@ -31,8 +49,6 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
       </div>
     );
   }
-
-  const ingredients = recipe.ingredients as unknown as RecipeIngredient[];
 
   function calculateRecipe() {
     const desired = parseInt(desiredBottles);
@@ -142,39 +158,92 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
   const bottleComponent = components.find(c => c.category === 'bottles' && c.type === product.bottle_type.toLowerCase());
   const labelComponent = findLabelComponent(product, components);
 
-  function updateManualQuantity(componentId: string, value: string) {
-    setManualQuantities((prev) => ({ ...prev, [componentId]: value }));
+  function startEditing() {
+    setEditingIngredients(
+      ingredients.map((ingredient) => ({
+        name: ingredient.name,
+        amount: Number(ingredient.amount) || 0,
+        unit: ingredient.unit || 'g'
+      }))
+    );
+    setEditingBatchSize(String(recipe.original_batch_size || ''));
+    setEditingMaterialQuantities({});
+    setIsEditing(true);
   }
 
-  async function saveMaterialOverride(component: Component, label: string) {
-    const rawValue = manualQuantities[component.id];
-    const nextQty = Number(rawValue);
+  function cancelEditing() {
+    setIsEditing(false);
+    setEditingMaterialQuantities({});
+  }
 
-    if (!Number.isFinite(nextQty) || !Number.isInteger(nextQty) || nextQty < 0) {
-      showToast?.('error', 'Enter a whole number quantity (0 or greater)');
+  function updateIngredientAmount(index: number, value: string) {
+    setEditingIngredients((prev) => {
+      const next = [...prev];
+      const parsed = Number(value);
+      const fallback = ingredients[index] || { name: '', amount: 0, unit: 'g' };
+      next[index] = {
+        ...(next[index] || fallback),
+        amount: Number.isFinite(parsed) ? parsed : 0
+      };
+      return next;
+    });
+  }
+
+  function setMaterialQuantity(componentId: string, value: string) {
+    setEditingMaterialQuantities((prev) => ({ ...prev, [componentId]: value }));
+  }
+
+  async function saveEdits() {
+    if (!product || !recipe) return;
+
+    const parsedBatchSize = Number(editingBatchSize);
+    if (!Number.isInteger(parsedBatchSize) || parsedBatchSize <= 0) {
+      showToast?.('error', 'Original batch size must be a whole number greater than 0');
       return;
     }
 
-    setSavingComponentId(component.id);
+    if (editingIngredients.length === 0 || editingIngredients.some((ingredient) => !Number.isFinite(ingredient.amount) || ingredient.amount <= 0)) {
+      showToast?.('error', 'All recipe ingredient amounts must be greater than 0');
+      return;
+    }
+
+    setSavingEdits(true);
     try {
-      const averageCost = asNumber(component.average_cost);
-      await api.components.update(component.id, {
-        quantity: nextQty,
-        average_cost: averageCost,
-        total_value: nextQty * averageCost
+      await api.products.updateRecipe(product.id, {
+        ingredients: editingIngredients,
+        original_batch_size: parsedBatchSize
       });
 
-      await reloadComponents();
-      setManualQuantities((prev) => {
-        const updated = { ...prev };
-        delete updated[component.id];
-        return updated;
-      });
-      showToast?.('success', `${label} quantity updated`);
-    } catch {
-      showToast?.('error', `Failed to update ${label.toLowerCase()} quantity`);
+      const quantityUpdates = Object.entries(editingMaterialQuantities)
+        .map(([componentId, value]) => {
+          const component = components.find((item) => item.id === componentId);
+          const quantity = Number(value);
+          if (!component || value.trim() === '') return null;
+          if (!Number.isInteger(quantity) || quantity < 0) {
+            throw new Error('Material quantities must be whole numbers 0 or greater');
+          }
+
+          return api.components.update(component.id, {
+            quantity,
+            average_cost: component.average_cost,
+            total_value: quantity * asNumber(component.average_cost)
+          });
+        })
+        .filter(Boolean);
+
+      await Promise.all(quantityUpdates as Promise<unknown>[]);
+      await Promise.all([reloadProduct(), reloadComponents()]);
+      setEditingMaterialQuantities({});
+      setIsEditing(false);
+      showToast?.('success', 'Product recipe and materials updated');
+    } catch (error) {
+      if (error instanceof Error) {
+        showToast?.('error', error.message);
+      } else {
+        showToast?.('error', 'Failed to save product edits');
+      }
     } finally {
-      setSavingComponentId(null);
+      setSavingEdits(false);
     }
   }
 
@@ -224,29 +293,26 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
         <div className="card p-4 sm:p-6">
           <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3">Material Stock</h2>
           <div className="space-y-2">
-            <MaterialOverrideRow
+            <MaterialStockRow
               label={`Lid (${product.lid_color})`}
               component={lidComponent}
-              value={lidComponent ? (manualQuantities[lidComponent.id] ?? '') : ''}
-              saving={lidComponent ? savingComponentId === lidComponent.id : false}
-              onChange={updateManualQuantity}
-              onSave={saveMaterialOverride}
+              isEditing={isEditing}
+              value={lidComponent ? (editingMaterialQuantities[lidComponent.id] ?? String(lidComponent.quantity)) : ''}
+              onChange={setMaterialQuantity}
             />
-            <MaterialOverrideRow
+            <MaterialStockRow
               label={`Bottle (${product.bottle_type})`}
               component={bottleComponent}
-              value={bottleComponent ? (manualQuantities[bottleComponent.id] ?? '') : ''}
-              saving={bottleComponent ? savingComponentId === bottleComponent.id : false}
-              onChange={updateManualQuantity}
-              onSave={saveMaterialOverride}
+              isEditing={isEditing}
+              value={bottleComponent ? (editingMaterialQuantities[bottleComponent.id] ?? String(bottleComponent.quantity)) : ''}
+              onChange={setMaterialQuantity}
             />
-            <MaterialOverrideRow
+            <MaterialStockRow
               label="Label"
               component={labelComponent}
-              value={labelComponent ? (manualQuantities[labelComponent.id] ?? '') : ''}
-              saving={labelComponent ? savingComponentId === labelComponent.id : false}
-              onChange={updateManualQuantity}
-              onSave={saveMaterialOverride}
+              isEditing={isEditing}
+              value={labelComponent ? (editingMaterialQuantities[labelComponent.id] ?? String(labelComponent.quantity)) : ''}
+              onChange={setMaterialQuantity}
             />
           </div>
         </div>
@@ -272,13 +338,43 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
               {ingredients.map((ing, idx) => (
                 <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
                   <span className="text-gray-700">{ing.name}</span>
-                  <span className="font-medium text-gray-900">{convertAmount(ing.amount, ing.unit)}</span>
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      inputMode="decimal"
+                      value={editingIngredients[idx]?.amount ?? ing.amount}
+                      onChange={(event) => updateIngredientAmount(idx, event.target.value)}
+                      className="w-24 h-8 px-2 border border-gray-300 rounded-lg text-right font-medium text-gray-900"
+                    />
+                  ) : (
+                    <span className="font-medium text-gray-900">{convertAmount(ing.amount, ing.unit)}</span>
+                  )}
                 </div>
               ))}
               <div className="flex justify-between items-center p-2 bg-orange-50 rounded-lg font-semibold text-sm">
                 <span className="text-gray-900">Total Weight</span>
-                <span className="text-orange-600">{convertTotalWeight(recipe.total_recipe_weight)}</span>
+                <span className="text-orange-600">
+                  {isEditing
+                    ? convertTotalWeight(editingIngredients.reduce((sum, ingredient) => sum + asNumber(ingredient.amount), 0))
+                    : convertTotalWeight(recipe.total_recipe_weight)}
+                </span>
               </div>
+              {isEditing && (
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
+                  <span className="text-gray-700">Original Batch Size</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputMode="numeric"
+                    value={editingBatchSize}
+                    onChange={(event) => setEditingBatchSize(event.target.value)}
+                    className="w-24 h-8 px-2 border border-gray-300 rounded-lg text-right font-medium text-gray-900"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -481,6 +577,36 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
           </div>
         )}
       </div>
+
+      {!isEditing && (
+        <div className="hidden md:flex fixed bottom-6 right-6 z-40">
+          <button
+            onClick={startEditing}
+            className="px-5 py-3 rounded-xl bg-[#1e3a5f] text-white font-semibold shadow-lg hover:bg-[#244872] transition-colors"
+          >
+            Edit Product
+          </button>
+        </div>
+      )}
+
+      {isEditing && (
+        <div className="hidden md:flex fixed bottom-6 right-6 z-40 gap-3">
+          <button
+            onClick={cancelEditing}
+            disabled={savingEdits}
+            className="px-5 py-3 rounded-xl bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={saveEdits}
+            disabled={savingEdits}
+            className="px-5 py-3 rounded-xl bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+          >
+            {savingEdits ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -521,23 +647,21 @@ function findLabelComponent(product: Product, components: Component[]) {
   return labels.find((label) => candidates.some((candidate) => label.type.includes(candidate))) ?? null;
 }
 
-interface MaterialOverrideRowProps {
+interface MaterialStockRowProps {
   label: string;
   component: Component | null | undefined;
+  isEditing: boolean;
   value: string;
-  saving: boolean;
   onChange: (componentId: string, value: string) => void;
-  onSave: (component: Component, label: string) => void;
 }
 
-function MaterialOverrideRow({
+function MaterialStockRow({
   label,
   component,
+  isEditing,
   value,
-  saving,
-  onChange,
-  onSave
-}: MaterialOverrideRowProps) {
+  onChange
+}: MaterialStockRowProps) {
   if (!component) {
     return (
       <div className="p-3 bg-red-50 rounded-xl border border-red-100">
@@ -553,25 +677,19 @@ function MaterialOverrideRow({
         <span className="text-sm text-gray-700">{label}</span>
         <span className="font-semibold text-gray-900">{component.quantity}</span>
       </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          min="0"
-          step="1"
-          inputMode="numeric"
-          value={value}
-          onChange={(event) => onChange(component.id, event.target.value)}
-          placeholder="Set qty"
-          className="input-touch flex-1 h-10 text-sm"
-        />
-        <button
-          onClick={() => onSave(component, label)}
-          disabled={saving || value.trim() === ''}
-          className="h-10 px-3 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Apply'}
-        </button>
-      </div>
+      {isEditing && (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            step="1"
+            inputMode="numeric"
+            value={value}
+            onChange={(event) => onChange(component.id, event.target.value)}
+            className="input-touch flex-1 h-10 text-sm"
+          />
+        </div>
+      )}
     </div>
   );
 }

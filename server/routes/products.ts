@@ -43,6 +43,47 @@ router.get('/:id/recipe', async (req, res) => {
   }
 });
 
+router.put('/:id/recipe', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { ingredients, original_batch_size } = req.body;
+
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
+      return res.status(400).json({ error: 'Ingredients are required' });
+    }
+
+    const parsedBatchSize = Number(original_batch_size);
+    if (!Number.isFinite(parsedBatchSize) || parsedBatchSize <= 0) {
+      return res.status(400).json({ error: 'original_batch_size must be greater than 0' });
+    }
+
+    const totalRecipeWeight = ingredients.reduce((sum, ingredient) => {
+      const amount = Number(ingredient?.amount);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+
+    const result = await query(
+      `UPDATE recipes
+       SET ingredients = $1::jsonb,
+           original_batch_size = $2,
+           total_recipe_weight = $3,
+           updated_at = NOW()
+       WHERE product_id = $4
+       RETURNING *`,
+      [JSON.stringify(ingredients), parsedBatchSize, totalRecipeWeight, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating recipe:', error);
+    res.status(500).json({ error: 'Failed to update recipe' });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const { name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku } = req.body;
