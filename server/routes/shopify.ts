@@ -3,6 +3,7 @@ import express, { Router } from 'express';
 import pool from '../db';
 
 const router = Router();
+const shopifyStockSyncOnly = process.env.SHOPIFY_STOCK_SYNC_ONLY !== 'false';
 
 type ShopifyLineItem = {
   title?: string;
@@ -29,6 +30,51 @@ type ShopifyOrderEventRow = {
   shopify_order_id: string;
   payload: ShopifyOrderPayload | null;
 };
+
+router.get('/sync-results', async (req, res) => {
+  const limitParam = Number(req.query.limit);
+  const limit = Number.isFinite(limitParam) && limitParam > 0
+    ? Math.min(Math.floor(limitParam), 50)
+    : 10;
+
+  try {
+    const result = await pool.query(
+      `SELECT
+         shopify_order_id,
+         shopify_webhook_id,
+         sales_event_id,
+         items_processed,
+         items_unmatched,
+         processed_at,
+         created_at
+       FROM shopify_order_events
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    const rows = result.rows.map((row) => ({
+      shopify_order_id: row.shopify_order_id,
+      shopify_webhook_id: row.shopify_webhook_id,
+      sales_event_id: row.sales_event_id,
+      items_processed: Number(row.items_processed ?? 0),
+      items_unmatched: Number(row.items_unmatched ?? 0),
+      processed_at: row.processed_at,
+      created_at: row.created_at,
+      mode: row.sales_event_id ? 'stock-and-sales' : 'stock-only',
+      status: row.processed_at ? 'processed' : 'pending',
+    }));
+
+    return res.json({
+      count: rows.length,
+      latest: rows[0] || null,
+      rows,
+    });
+  } catch (error) {
+    console.error('Error fetching Shopify sync results:', error);
+    return res.status(500).json({ error: 'Failed to fetch Shopify sync results' });
+  }
+});
 
 function verifyShopifyWebhook(rawBody: Buffer, hmacHeader: string, secret: string) {
   const digest = crypto
@@ -222,44 +268,48 @@ router.post(
       let salesEventId: string | null = null;
 
       if (matchedItems.length > 0) {
-        const totalRevenue = matchedItems.reduce(
-          (sum, item) => sum + item.quantitySold * item.unitPrice,
-          0
-        );
+        if (!shopifyStockSyncOnly) {
+          const totalRevenue = matchedItems.reduce(
+            (sum, item) => sum + item.quantitySold * item.unitPrice,
+            0
+          );
 
-        const salesEventResult = await client.query(
-          `INSERT INTO sales_events (event_name, event_date, total_revenue, notes)
-           VALUES ($1, $2, $3, $4)
-           RETURNING id`,
-          [
-            `Shopify Order #${orderReference}`,
-            eventDate,
-            totalRevenue,
-            `Imported automatically from Shopify order ${orderReference}`,
-          ]
-        );
-
-        salesEventId = salesEventResult.rows[0].id;
-
-        for (const item of matchedItems) {
-          const subtotal = item.quantitySold * item.unitPrice;
-
-          await client.query(
-            `INSERT INTO sales_items
-              (sales_event_id, product_id, product_name, starting_stock, ending_stock, quantity_sold, unit_price, subtotal)
-             VALUES
-              ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          const salesEventResult = await client.query(
+            `INSERT INTO sales_events (event_name, event_date, total_revenue, notes)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
             [
-              salesEventId,
-              item.productId,
-              item.productName,
-              item.startingStock,
-              item.endingStock,
-              item.quantitySold,
-              item.unitPrice,
-              subtotal,
+              `Shopify Order #${orderReference}`,
+              eventDate,
+              totalRevenue,
+              `Imported automatically from Shopify order ${orderReference}`,
             ]
           );
+
+          salesEventId = salesEventResult.rows[0].id;
+        }
+
+        for (const item of matchedItems) {
+          if (!shopifyStockSyncOnly && salesEventId) {
+            const subtotal = item.quantitySold * item.unitPrice;
+
+            await client.query(
+              `INSERT INTO sales_items
+                (sales_event_id, product_id, product_name, starting_stock, ending_stock, quantity_sold, unit_price, subtotal)
+               VALUES
+                ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [
+                salesEventId,
+                item.productId,
+                item.productName,
+                item.startingStock,
+                item.endingStock,
+                item.quantitySold,
+                item.unitPrice,
+                subtotal,
+              ]
+            );
+          }
 
           await client.query(
             'UPDATE products SET current_stock = $1, updated_at = NOW() WHERE id = $2',
@@ -283,6 +333,7 @@ router.post(
       res.json({
         success: true,
         duplicate: false,
+        mode: shopifyStockSyncOnly ? 'stock-only' : 'stock-and-sales',
         itemsProcessed: matchedItems.length,
         itemsUnmatched: unmatchedCount,
       });

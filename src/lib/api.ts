@@ -59,5 +59,6 @@ export const api = {
   },
   shopify: {
     getOrderBySalesEvent: (salesEventId: string) => fetchAPI(`/shopify/orders/by-sales-event/${salesEventId}`),
+    getSyncResults: (limit = 10) => fetchAPI(`/shopify/sync-results?limit=${limit}`),
   },
 };

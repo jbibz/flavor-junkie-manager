@@ -84,6 +84,7 @@ Database connection settings are configured in the `.env` file:
 - `DB_USER` - Database user (default: postgres)
 - `DB_PASSWORD` - Database password (default: postgres)
 - `SHOPIFY_WEBHOOK_SECRET` - Shared secret used to verify Shopify webhooks
+- `SHOPIFY_STOCK_SYNC_ONLY` - `true` = only update inventory from Shopify orders, `false` = also create sales events/items
 
 ### Shopify Integration
 
@@ -95,5 +96,6 @@ Inventory can be reduced automatically from Shopify orders using a webhook.
 2. In Shopify Admin, create an `orders/create` webhook pointed to:
    - `POST /api/shopify/webhooks/orders-create`
 3. Use the same webhook secret in Shopify and `SHOPIFY_WEBHOOK_SECRET`.
+4. Set `SHOPIFY_STOCK_SYNC_ONLY=true` to only decrement inventory counts from Shopify orders.
 
-Each webhook is processed once per Shopify order id, and matched line items are recorded as a sales event plus sales items while decrementing `products.current_stock`.
+Each webhook is processed once per Shopify order id. In stock-only mode, only `products.current_stock` is updated for matched products.

@@ -216,6 +216,7 @@ DB_USER=postgres
 DB_PASSWORD=postgres
 PORT=3001
 SHOPIFY_WEBHOOK_SECRET=your-shopify-webhook-secret
+SHOPIFY_STOCK_SYNC_ONLY=true
 ```
 
 ### Changing Ports

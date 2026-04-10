@@ -18,6 +18,16 @@ interface StatCardProps {
   bgColor: string;
 }
 
+interface ShopifySyncRow {
+  shopify_order_id: string;
+  items_processed: number;
+  items_unmatched: number;
+  processed_at: string | null;
+  created_at: string;
+  mode: 'stock-only' | 'stock-and-sales';
+  status: 'processed' | 'pending';
+}
+
 function StatCard({ label, value, icon, bgColor }: StatCardProps) {
   return (
     <div className="card p-4 sm:p-6">
@@ -44,6 +54,8 @@ export default function SalesTracking({ showToast }: SalesTrackingProps) {
   const [selectedEvent, setSelectedEvent] = useState<SalesEvent | null>(null);
   const [editingEvent, setEditingEvent] = useState<SalesEvent | null>(null);
   const [totalUnits, setTotalUnits] = useState(0);
+  const [shopifySyncRows, setShopifySyncRows] = useState<ShopifySyncRow[]>([]);
+  const [shopifySyncLoading, setShopifySyncLoading] = useState(true);
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
@@ -56,6 +68,10 @@ export default function SalesTracking({ showToast }: SalesTrackingProps) {
   useEffect(() => {
     loadMonthStats();
   }, [events]);
+
+  useEffect(() => {
+    loadShopifySyncResults();
+  }, []);
 
   async function loadMonthStats() {
     if (events.length === 0) {
@@ -73,6 +89,19 @@ export default function SalesTracking({ showToast }: SalesTrackingProps) {
     } catch (error) {
       console.error('Error loading month stats:', error);
       setTotalUnits(0);
+    }
+  }
+
+  async function loadShopifySyncResults() {
+    setShopifySyncLoading(true);
+    try {
+      const response = await api.shopify.getSyncResults(6);
+      setShopifySyncRows(response?.rows || []);
+    } catch (error) {
+      console.error('Error loading Shopify sync results:', error);
+      setShopifySyncRows([]);
+    } finally {
+      setShopifySyncLoading(false);
     }
   }
 
@@ -167,6 +196,61 @@ export default function SalesTracking({ showToast }: SalesTrackingProps) {
           icon="📅"
           bgColor="bg-orange-100"
         />
+      </div>
+
+      <div className="card p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Last Shopify Sync Results</h2>
+          <button
+            onClick={loadShopifySyncResults}
+            className="text-xs sm:text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {shopifySyncLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-5 h-5 animate-spin text-orange-600" />
+          </div>
+        ) : shopifySyncRows.length === 0 ? (
+          <p className="text-sm text-gray-500">No Shopify syncs found yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {shopifySyncRows.map((row) => (
+              <div key={row.shopify_order_id} className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="flex flex-wrap items-center gap-2 justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-semibold text-sm text-gray-900 truncate">
+                      Order {row.shopify_order_id}
+                    </p>
+                    <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-medium ${
+                      row.mode === 'stock-only'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {row.mode === 'stock-only' ? 'Stock Only' : 'Stock + Sales'}
+                    </span>
+                    <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-medium ${
+                      row.status === 'processed'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {row.status === 'processed' ? 'Processed' : 'Pending'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {new Date((row.processed_at || row.created_at)).toLocaleString('en-US')}
+                  </p>
+                </div>
+                <div className="mt-2 flex items-center gap-4 text-xs sm:text-sm">
+                  <span className="text-gray-600">Matched: <span className="font-semibold text-green-700">{row.items_processed}</span></span>
+                  <span className="text-gray-600">Unmatched: <span className="font-semibold text-amber-700">{row.items_unmatched}</span></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card p-4 sm:p-6">
