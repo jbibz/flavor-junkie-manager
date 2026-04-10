@@ -77,9 +77,9 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[100dvh] bg-gray-50">
       <Header currentPage={currentPage} onNavigate={setCurrentPage} />
-      <main className="container mx-auto px-3 sm:px-4 pt-4 pb-28 md:py-6 md:pb-8 max-w-7xl">
+      <main className="container mx-auto px-3 sm:px-4 pt-4 pb-[calc(120px+env(safe-area-inset-bottom))] md:py-6 md:pb-8 max-w-7xl">
         {renderPage()}
       </main>
 

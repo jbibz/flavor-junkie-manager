@@ -88,9 +88,9 @@ export default function FloatingActionButton({
       {mobileOpen && (
         <div
           className="md:hidden fixed bottom-0 inset-x-0 z-50 animate-slide-up"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
         >
-          <div className="bg-white rounded-t-3xl shadow-2xl overflow-hidden">
+          <div className="bg-white rounded-t-3xl shadow-2xl overflow-hidden max-h-[82dvh] overflow-y-auto">
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3" />
             <div className="px-5 pt-4 pb-6">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 px-1">

@@ -13,6 +13,7 @@
   html {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
@@ -23,6 +24,7 @@
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior-y: none;
     overflow-x: hidden;
+    min-height: 100dvh;
   }
 
   * {
@@ -73,7 +75,11 @@
   }
 
   .bottom-nav-safe {
-    padding-bottom: calc(80px + var(--sab));
+    padding-bottom: calc(96px + var(--sab));
+  }
+
+  .mobile-page-safe {
+    padding-bottom: calc(116px + var(--sab));
   }
 
   .touch-target {
@@ -115,7 +121,7 @@
 
   .bottom-sheet {
     @apply fixed inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl z-50 max-h-[90vh] overflow-hidden;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
   }
 
   .bottom-sheet-backdrop {

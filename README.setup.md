@@ -215,6 +215,7 @@ DB_NAME=flavor_junkie
 DB_USER=postgres
 DB_PASSWORD=postgres
 PORT=3001
+SHOPIFY_WEBHOOK_SECRET=your-shopify-webhook-secret
 ```
 
 ### Changing Ports

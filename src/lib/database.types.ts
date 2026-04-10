@@ -6,7 +6,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type TableNames = 'products' | 'components' | 'recipes' | 'sales_events' | 'sales_items' | 'production_history' | 'component_purchases' | 'dashboard_notes';
+export type TableNames = 'products' | 'components' | 'recipes' | 'sales_events' | 'sales_items' | 'production_history' | 'component_purchases' | 'dashboard_notes' | 'shopify_order_events';
 
 export interface Database {
   public: {
@@ -22,6 +22,8 @@ export interface Database {
           bottle_type: string
           price: number
           description: string
+          shopify_variant_id: string | null
+          shopify_sku: string | null
           created_at: string
           updated_at: string
         }
@@ -35,6 +37,8 @@ export interface Database {
           bottle_type: string
           price?: number
           description?: string
+          shopify_variant_id?: string | null
+          shopify_sku?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -48,6 +52,8 @@ export interface Database {
           bottle_type?: string
           price?: number
           description?: string
+          shopify_variant_id?: string | null
+          shopify_sku?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -258,6 +264,41 @@ export interface Database {
           updated_at?: string
         }
       }
+      shopify_order_events: {
+        Row: {
+          id: string
+          shopify_order_id: string
+          shopify_webhook_id: string | null
+          sales_event_id: string | null
+          items_processed: number
+          items_unmatched: number
+          payload: Json
+          processed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          shopify_order_id: string
+          shopify_webhook_id?: string | null
+          sales_event_id?: string | null
+          items_processed?: number
+          items_unmatched?: number
+          payload?: Json
+          processed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          shopify_order_id?: string
+          shopify_webhook_id?: string | null
+          sales_event_id?: string | null
+          items_processed?: number
+          items_unmatched?: number
+          payload?: Json
+          processed_at?: string | null
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -270,6 +311,7 @@ export type SalesItem = Database['public']['Tables']['sales_items']['Row'];
 export type ProductionHistory = Database['public']['Tables']['production_history']['Row'];
 export type ComponentPurchase = Database['public']['Tables']['component_purchases']['Row'];
 export type DashboardNotes = Database['public']['Tables']['dashboard_notes']['Row'];
+export type ShopifyOrderEvent = Database['public']['Tables']['shopify_order_events']['Row'];
 
 export interface RecipeIngredient {
   name: string;

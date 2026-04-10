@@ -45,10 +45,11 @@ router.get('/:id/recipe', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, current_stock, min_stock_level, unit } = req.body;
+    const { name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku } = req.body;
     const result = await query(
-      'INSERT INTO products (name, current_stock, min_stock_level, unit) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, current_stock, min_stock_level, unit]
+      `INSERT INTO products (name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [name, current_stock, min_stock_level, unit, shopify_variant_id || null, shopify_sku || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -60,10 +61,19 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, current_stock, min_stock_level, unit } = req.body;
+    const { name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku } = req.body;
     const result = await query(
-      'UPDATE products SET name = $1, current_stock = $2, min_stock_level = $3, unit = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
-      [name, current_stock, min_stock_level, unit, id]
+      `UPDATE products
+       SET name = $1,
+           current_stock = $2,
+           min_stock_level = $3,
+           unit = $4,
+           shopify_variant_id = $5,
+           shopify_sku = $6,
+           updated_at = NOW()
+       WHERE id = $7
+       RETURNING *`,
+      [name, current_stock, min_stock_level, unit, shopify_variant_id || null, shopify_sku || null, id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
