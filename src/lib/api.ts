@@ -57,8 +57,4 @@ export const api = {
     update: (id: string, data: any) => fetchAPI(`/components/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     addPurchase: (id: string, data: any) => fetchAPI(`/components/${id}/purchases`, { method: 'POST', body: JSON.stringify(data) }),
   },
-  shopify: {
-    getOrderBySalesEvent: (salesEventId: string) => fetchAPI(`/shopify/orders/by-sales-event/${salesEventId}`),
-    getSyncResults: (limit = 10) => fetchAPI(`/shopify/sync-results?limit=${limit}`),
-  },
 };

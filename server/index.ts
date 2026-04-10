@@ -8,7 +8,6 @@ import salesRouter from './routes/sales';
 import productionRouter from './routes/production';
 import dashboardRouter from './routes/dashboard';
 import componentsRouter from './routes/components';
-import shopifyRouter from './routes/shopify';
 
 dotenv.config();
 
@@ -19,7 +18,6 @@ const app = express();
 const PORT = process.env.PORT || 3033;
 
 app.use(cors());
-app.use('/api/shopify', shopifyRouter);
 app.use(express.json());
 
 app.use('/api/products', productsRouter);
