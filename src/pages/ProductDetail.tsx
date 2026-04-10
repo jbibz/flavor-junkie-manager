@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2, Edit3 } from 'lucide-react';
 import { useProduct, useComponents, useProductionHistory } from '../lib/hooks';
 import { api } from '../lib/api';
 import type { RecipeIngredient, Product, Component } from '../lib/database.types';
@@ -481,6 +481,14 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
           </div>
         )}
       </div>
+
+      <button
+        onClick={() => showToast?.('error', 'Product editing is not available yet')}
+        className="fixed left-4 md:left-6 bottom-[calc(92px+env(safe-area-inset-bottom))] md:bottom-6 z-30 btn-touch bg-[#1e3a5f] text-white active:bg-[#2a4d78] px-4"
+      >
+        <Edit3 className="w-4 h-4 mr-2" />
+        Edit Product
+      </button>
     </div>
   );
 }
