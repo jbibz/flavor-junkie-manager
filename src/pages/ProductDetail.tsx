@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2 } from 'lucide-react';
 import { useProduct, useComponents, useProductionHistory } from '../lib/hooks';
 import { api } from '../lib/api';
-import type { RecipeIngredient } from '../lib/database.types';
+import type { RecipeIngredient, Product, Component } from '../lib/database.types';
 import type { ToastType } from '../components/Toast';
 import UnitToggle from '../components/UnitToggle';
 
@@ -14,13 +14,15 @@ interface ProductDetailProps {
 
 export default function ProductDetail({ productId, onBack, showToast }: ProductDetailProps) {
   const { product, recipe, loading } = useProduct(productId);
-  const { components } = useComponents();
+  const { components, reload: reloadComponents } = useComponents();
   const { history, reload: reloadHistory } = useProductionHistory(productId);
   const [desiredBottles, setDesiredBottles] = useState('');
   const [scaledRecipe, setScaledRecipe] = useState<{ factor: number; ingredients: RecipeIngredient[] } | null>(null);
   const [expandedSections, setExpandedSections] = useState<string[]>(['margin']);
   const [makingBatch, setMakingBatch] = useState(false);
   const [showGrams, setShowGrams] = useState(true);
+  const [manualQuantities, setManualQuantities] = useState<Record<string, string>>({});
+  const [savingComponentId, setSavingComponentId] = useState<string | null>(null);
 
   if (loading || !product || !recipe) {
     return (
@@ -52,13 +54,11 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
     const desired = parseInt(desiredBottles);
     const lidKey = product.lid_color.toLowerCase();
     const bottleKey = product.bottle_type.toLowerCase();
-    const labelKey = product.name.toLowerCase().replace(/ /g, '_') +
-      (product.size === 'Big' ? '_big' : '') +
-      (product.name.includes('Heat') ? '' : '');
 
     const lidComponent = components.find(c => c.category === 'lids' && c.type === lidKey);
     const bottleComponent = components.find(c => c.category === 'bottles' && c.type === bottleKey);
-    const labelComponent = components.find(c => c.category === 'labels' && c.type.includes(labelKey.split('_')[0]));
+    const labelComponent = findLabelComponent(product, components);
+    const labelKey = labelComponent?.type ?? getProductLabelCandidates(product)[0];
 
     if (!lidComponent || !bottleComponent || !labelComponent) {
       showToast?.('error', 'Missing component data');
@@ -105,6 +105,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
       });
 
       reloadHistory();
+      reloadComponents();
       setScaledRecipe(null);
       setDesiredBottles('');
       showToast?.('success', `Produced ${desired} units of ${product.name}`);
@@ -139,6 +140,43 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
 
   const lidComponent = components.find(c => c.category === 'lids' && c.type === product.lid_color.toLowerCase());
   const bottleComponent = components.find(c => c.category === 'bottles' && c.type === product.bottle_type.toLowerCase());
+  const labelComponent = findLabelComponent(product, components);
+
+  function updateManualQuantity(componentId: string, value: string) {
+    setManualQuantities((prev) => ({ ...prev, [componentId]: value }));
+  }
+
+  async function saveMaterialOverride(component: Component, label: string) {
+    const rawValue = manualQuantities[component.id];
+    const nextQty = Number(rawValue);
+
+    if (!Number.isFinite(nextQty) || !Number.isInteger(nextQty) || nextQty < 0) {
+      showToast?.('error', 'Enter a whole number quantity (0 or greater)');
+      return;
+    }
+
+    setSavingComponentId(component.id);
+    try {
+      const averageCost = asNumber(component.average_cost);
+      await api.components.update(component.id, {
+        quantity: nextQty,
+        average_cost: averageCost,
+        total_value: nextQty * averageCost
+      });
+
+      await reloadComponents();
+      setManualQuantities((prev) => {
+        const updated = { ...prev };
+        delete updated[component.id];
+        return updated;
+      });
+      showToast?.('success', `${label} quantity updated`);
+    } catch {
+      showToast?.('error', `Failed to update ${label.toLowerCase()} quantity`);
+    } finally {
+      setSavingComponentId(null);
+    }
+  }
 
   const lidAverageCost = asNumber(lidComponent?.average_cost);
   const bottleAverageCost = asNumber(bottleComponent?.average_cost);
@@ -186,18 +224,30 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
         <div className="card p-4 sm:p-6">
           <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-3">Material Stock</h2>
           <div className="space-y-2">
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-              <span className="text-sm text-gray-700">Lid ({product.lid_color})</span>
-              <span className="font-semibold text-gray-900">{lidComponent?.quantity || 0}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-              <span className="text-sm text-gray-700">Bottle ({product.bottle_type})</span>
-              <span className="font-semibold text-gray-900">{bottleComponent?.quantity || 0}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
-              <span className="text-sm text-gray-700">Label</span>
-              <span className="text-sm text-green-600 font-medium">Available</span>
-            </div>
+            <MaterialOverrideRow
+              label={`Lid (${product.lid_color})`}
+              component={lidComponent}
+              value={lidComponent ? (manualQuantities[lidComponent.id] ?? '') : ''}
+              saving={lidComponent ? savingComponentId === lidComponent.id : false}
+              onChange={updateManualQuantity}
+              onSave={saveMaterialOverride}
+            />
+            <MaterialOverrideRow
+              label={`Bottle (${product.bottle_type})`}
+              component={bottleComponent}
+              value={bottleComponent ? (manualQuantities[bottleComponent.id] ?? '') : ''}
+              saving={bottleComponent ? savingComponentId === bottleComponent.id : false}
+              onChange={updateManualQuantity}
+              onSave={saveMaterialOverride}
+            />
+            <MaterialOverrideRow
+              label="Label"
+              component={labelComponent}
+              value={labelComponent ? (manualQuantities[labelComponent.id] ?? '') : ''}
+              saving={labelComponent ? savingComponentId === labelComponent.id : false}
+              onChange={updateManualQuantity}
+              onSave={saveMaterialOverride}
+            />
           </div>
         </div>
       </div>
@@ -438,6 +488,92 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
 function asNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function slugifyName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function getProductLabelCandidates(product: Product) {
+  const base = slugifyName(product.name);
+  const normalizedHeat = base.replace('_plus_heat', '_heat');
+  const uniqueBases = Array.from(new Set([normalizedHeat, base]));
+
+  if (product.size === 'Big') {
+    return uniqueBases.map((value) => `${value}_big`);
+  }
+
+  return uniqueBases;
+}
+
+function findLabelComponent(product: Product, components: Component[]) {
+  const labels = components.filter((component) => component.category === 'labels');
+  const candidates = getProductLabelCandidates(product);
+
+  for (const candidate of candidates) {
+    const exact = labels.find((label) => label.type === candidate);
+    if (exact) return exact;
+  }
+
+  return labels.find((label) => candidates.some((candidate) => label.type.includes(candidate))) ?? null;
+}
+
+interface MaterialOverrideRowProps {
+  label: string;
+  component: Component | null | undefined;
+  value: string;
+  saving: boolean;
+  onChange: (componentId: string, value: string) => void;
+  onSave: (component: Component, label: string) => void;
+}
+
+function MaterialOverrideRow({
+  label,
+  component,
+  value,
+  saving,
+  onChange,
+  onSave
+}: MaterialOverrideRowProps) {
+  if (!component) {
+    return (
+      <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+        <p className="text-sm font-medium text-red-700">{label}</p>
+        <p className="text-xs text-red-600 mt-1">Component not mapped</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 bg-gray-50 rounded-xl">
+      <div className="flex justify-between items-center gap-3 mb-2">
+        <span className="text-sm text-gray-700">{label}</span>
+        <span className="font-semibold text-gray-900">{component.quantity}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min="0"
+          step="1"
+          inputMode="numeric"
+          value={value}
+          onChange={(event) => onChange(component.id, event.target.value)}
+          placeholder="Set qty"
+          className="input-touch flex-1 h-10 text-sm"
+        />
+        <button
+          onClick={() => onSave(component, label)}
+          disabled={saving || value.trim() === ''}
+          className="h-10 px-3 rounded-lg bg-[#1e3a5f] text-white text-sm font-medium disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Apply'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface CollapsibleSectionProps {
