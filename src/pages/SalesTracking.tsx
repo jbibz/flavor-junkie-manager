@@ -279,6 +279,11 @@ export default function SalesTracking({ showToast }: SalesTrackingProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-bold text-gray-900 truncate text-sm sm:text-base">{event.event_name}</h3>
+                      {isShopifyImportedEvent(event) && (
+                        <span className="flex-shrink-0 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] sm:text-xs font-medium rounded-full">
+                          Shopify
+                        </span>
+                      )}
                       <span className="flex-shrink-0 px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] sm:text-xs font-medium rounded-full">
                         {new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-US', {
                           month: 'short',
@@ -345,6 +350,25 @@ interface EventDetailsModalProps {
   event: SalesEvent;
   onClose: () => void;
   onEdit: () => void;
+}
+
+interface ShopifyOrderDetails {
+  shopify_order_id: string;
+  order_name: string | null;
+  order_number: string | null;
+  created_at: string | null;
+  line_items: Array<{
+    title: string;
+    sku: string | null;
+    variant_id: string | null;
+    quantity: number;
+    unit_price: number;
+    subtotal: number;
+  }>;
+}
+
+function isShopifyImportedEvent(event: SalesEvent) {
+  return event.event_name.startsWith('Shopify Order #');
 }
 
 function EventDetailsModal({ event, onClose, onEdit }: EventDetailsModalProps) {
@@ -421,6 +445,40 @@ interface ModalContentProps {
 }
 
 function ModalContent({ event, items, loading, onClose, onEdit, hasPendingItems }: ModalContentProps) {
+  const shopifyEvent = isShopifyImportedEvent(event);
+  const [shopifyOrder, setShopifyOrder] = useState<ShopifyOrderDetails | null>(null);
+  const [shopifyLoading, setShopifyLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadShopifyOrder() {
+      if (!shopifyEvent) {
+        setShopifyOrder(null);
+        return;
+      }
+
+      setShopifyLoading(true);
+      try {
+        const response = await api.shopify.getOrderBySalesEvent(event.id);
+        if (isMounted) {
+          setShopifyOrder(response);
+        }
+      } catch (error) {
+        console.error('Error loading Shopify order details:', error);
+      } finally {
+        if (isMounted) {
+          setShopifyLoading(false);
+        }
+      }
+    }
+
+    loadShopifyOrder();
+    return () => {
+      isMounted = false;
+    };
+  }, [event.id, shopifyEvent]);
+
   return (
     <div className="flex flex-col max-h-[85vh] md:max-h-[90vh]">
       <div className="flex items-start justify-between p-4 md:p-6 border-b border-gray-100">
@@ -480,6 +538,37 @@ function ModalContent({ event, items, loading, onClose, onEdit, hasPendingItems 
           </div>
         ) : null}
 
+        {shopifyEvent && (
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Shopify Order Items</h3>
+            {shopifyLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-orange-600" />
+              </div>
+            ) : shopifyOrder && shopifyOrder.line_items.length > 0 ? (
+              <div className="space-y-2">
+                {shopifyOrder.line_items.map((lineItem, index) => (
+                  <div key={`${lineItem.title}-${lineItem.sku || 'no-sku'}-${index}`} className="p-3 md:p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-medium text-gray-900 text-sm sm:text-base">{lineItem.title}</p>
+                      <p className="font-bold text-emerald-700">${lineItem.subtotal.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs sm:text-sm text-gray-600">
+                      <span>Qty: <span className="font-semibold text-gray-800">{lineItem.quantity}</span></span>
+                      <span>Unit: <span className="font-semibold text-gray-800">${lineItem.unit_price.toFixed(2)}</span></span>
+                      {lineItem.sku && <span>SKU: <span className="font-medium text-gray-700">{lineItem.sku}</span></span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 bg-gray-50 p-3 rounded-xl">
+                Shopify line-item details are not available for this event.
+              </p>
+            )}
+          </div>
+        )}
+
         {event.notes && (
           <div>
             <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Notes</h3>
@@ -497,10 +586,11 @@ function ModalContent({ event, items, loading, onClose, onEdit, hasPendingItems 
         </button>
         <button
           onClick={onEdit}
+          disabled={shopifyEvent}
           className="flex-1 btn-primary flex items-center justify-center gap-2"
         >
           <Edit2 className="w-4 h-4" />
-          Edit Event
+          {shopifyEvent ? 'Imported from Shopify' : 'Edit Event'}
         </button>
       </div>
     </div>

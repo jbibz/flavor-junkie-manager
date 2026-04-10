@@ -25,6 +25,11 @@ type ShopifyOrderPayload = {
   line_items?: ShopifyLineItem[];
 };
 
+type ShopifyOrderEventRow = {
+  shopify_order_id: string;
+  payload: ShopifyOrderPayload | null;
+};
+
 function verifyShopifyWebhook(rawBody: Buffer, hmacHeader: string, secret: string) {
   const digest = crypto
     .createHmac('sha256', secret)
@@ -54,6 +59,52 @@ function parseUnitPrice(lineItem: ShopifyLineItem) {
 
   return 0;
 }
+
+router.get('/orders/by-sales-event/:salesEventId', async (req, res) => {
+  const { salesEventId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT shopify_order_id, payload
+       FROM shopify_order_events
+       WHERE sales_event_id = $1
+       LIMIT 1`,
+      [salesEventId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Shopify order not found for this sales event' });
+    }
+
+    const row = result.rows[0] as ShopifyOrderEventRow;
+    const payload = row.payload || {};
+    const lineItems = Array.isArray(payload.line_items) ? payload.line_items : [];
+
+    const normalizedLineItems = lineItems.map((item) => {
+      const quantity = Number(item.quantity ?? 0);
+      const unitPrice = parseUnitPrice(item);
+      return {
+        title: item.title || 'Untitled item',
+        sku: item.sku || null,
+        variant_id: item.variant_id ? String(item.variant_id) : null,
+        quantity: Number.isFinite(quantity) ? quantity : 0,
+        unit_price: unitPrice,
+        subtotal: (Number.isFinite(quantity) ? quantity : 0) * unitPrice,
+      };
+    });
+
+    return res.json({
+      shopify_order_id: row.shopify_order_id,
+      order_name: payload.name || null,
+      order_number: payload.order_number ? String(payload.order_number) : null,
+      created_at: payload.created_at || null,
+      line_items: normalizedLineItems,
+    });
+  } catch (error) {
+    console.error('Error fetching Shopify order by sales event:', error);
+    return res.status(500).json({ error: 'Failed to fetch Shopify order details' });
+  }
+});
 
 router.post(
   '/webhooks/orders-create',
