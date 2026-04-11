@@ -3,8 +3,9 @@ import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2 } fr
 import { useProduct, useComponents, useProductionHistory } from '../lib/hooks';
 import { api } from '../lib/api';
 import type { RecipeIngredient, Product, Component } from '../lib/database.types';
-import type { ToastType } from '../components/Toast';
+import type { ToastType } from '../lib/toast';
 import UnitToggle from '../components/UnitToggle';
+import EditProductModal from '../components/EditProductModal';
 
 interface ProductDetailProps {
   productId: string | undefined;
@@ -42,7 +43,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
     setEditingBatchSize(String(recipe.original_batch_size || ''));
   }, [isEditing, recipe]);
 
-  if (loading || !product || !recipe) {
+  if (loading || !product) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
@@ -99,29 +100,17 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
           bottles: `${bottleKey}: ${desired}`,
           labels: `${labelKey}: ${desired}`
         },
-        notes: ''
-      });
-
-      await api.components.update(lidComponent.id, {
-        quantity: lidComponent.quantity - desired,
-        average_cost: lidComponent.average_cost,
-        total_value: (lidComponent.quantity - desired) * lidComponent.average_cost
-      });
-
-      await api.components.update(bottleComponent.id, {
-        quantity: bottleComponent.quantity - desired,
-        average_cost: bottleComponent.average_cost,
-        total_value: (bottleComponent.quantity - desired) * bottleComponent.average_cost
-      });
-
-      await api.components.update(labelComponent.id, {
-        quantity: labelComponent.quantity - desired,
-        average_cost: labelComponent.average_cost,
-        total_value: (labelComponent.quantity - desired) * labelComponent.average_cost
+        notes: '',
+        component_adjustments: [
+          { component_id: lidComponent.id, quantity_delta: -desired },
+          { component_id: bottleComponent.id, quantity_delta: -desired },
+          { component_id: labelComponent.id, quantity_delta: -desired },
+        ],
       });
 
       reloadHistory();
       reloadComponents();
+      reloadProduct();
       setScaledRecipe(null);
       setDesiredBottles('');
       showToast?.('success', `Produced ${desired} units of ${product.name}`);
@@ -331,117 +320,101 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">
-              Original Recipe ({recipe.original_batch_size} bottles)
-            </h3>
-            <div className="space-y-2">
-              {ingredients.map((ing, idx) => (
-                <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
-                  <span className="text-gray-700">{ing.name}</span>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      inputMode="decimal"
-                      value={editingIngredients[idx]?.amount ?? ing.amount}
-                      onChange={(event) => updateIngredientAmount(idx, event.target.value)}
-                      className="w-24 h-8 px-2 border border-gray-300 rounded-lg text-right font-medium text-gray-900"
-                    />
-                  ) : (
-                    <span className="font-medium text-gray-900">{convertAmount(ing.amount, ing.unit)}</span>
-                  )}
+            {recipe ? (
+              <>
+                <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">
+                  Original Recipe ({recipe.original_batch_size} bottles)
+                </h3>
+                <div className="space-y-2">
+                  {ingredients.map((ing, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
+                      <span className="text-gray-700">{ing.name}</span>
+                      <span className="font-medium text-gray-900">{convertAmount(ing.amount, ing.unit)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center p-2 bg-orange-50 rounded-lg font-semibold text-sm">
+                    <span className="text-gray-900">Total Weight</span>
+                    <span className="text-orange-600">{convertTotalWeight(recipe.total_recipe_weight)}</span>
+                  </div>
                 </div>
-              ))}
-              <div className="flex justify-between items-center p-2 bg-orange-50 rounded-lg font-semibold text-sm">
-                <span className="text-gray-900">Total Weight</span>
-                <span className="text-orange-600">
-                  {isEditing
-                    ? convertTotalWeight(editingIngredients.reduce((sum, ingredient) => sum + asNumber(ingredient.amount), 0))
-                    : convertTotalWeight(recipe.total_recipe_weight)}
-                </span>
+              </>
+            ) : (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                No recipe is configured for this product yet.
               </div>
-              {isEditing && (
-                <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg text-sm">
-                  <span className="text-gray-700">Original Batch Size</span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="numeric"
-                    value={editingBatchSize}
-                    onChange={(event) => setEditingBatchSize(event.target.value)}
-                    className="w-24 h-8 px-2 border border-gray-300 rounded-lg text-right font-medium text-gray-900"
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <div>
             <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Calculate Batch</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  How many bottles?
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min="1"
-                    value={desiredBottles}
-                    onChange={(e) => setDesiredBottles(e.target.value)}
-                    placeholder="Enter quantity"
-                    className="input-touch flex-1"
-                  />
-                  <button
-                    onClick={calculateRecipe}
-                    className="btn-primary px-5"
-                  >
-                    Calculate
-                  </button>
-                </div>
-              </div>
-
-              {scaledRecipe && (
-                <div className="border-2 border-orange-200 rounded-xl p-4 space-y-3 bg-orange-50/50">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-gray-900">Scaled Recipe</span>
-                    <span className="text-xs text-gray-600 bg-white px-2 py-1 rounded-lg">
-                      {scaledRecipe.factor.toFixed(2)}x
-                    </span>
-                  </div>
-                  {scaledRecipe.ingredients.map((ing, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-sm">
-                      <span className="text-gray-700">{ing.name}</span>
-                      <span className="font-semibold text-orange-600">
-                        {showGrams ? `${ing.amount}${ing.unit}` : `${(ing.amount / 453.592).toFixed(2)}lbs`}
-                      </span>
-                    </div>
-                  ))}
-                  <div className="pt-3 border-t border-orange-200">
+            {recipe ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    How many bottles?
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={desiredBottles}
+                      onChange={(e) => setDesiredBottles(e.target.value)}
+                      placeholder="Enter quantity"
+                      className="input-touch flex-1"
+                    />
                     <button
-                      onClick={makeBatch}
-                      disabled={makingBatch}
-                      className="w-full btn-touch bg-green-600 text-white active:bg-green-700 disabled:opacity-50"
+                      onClick={calculateRecipe}
+                      className="btn-primary px-5"
                     >
-                      {makingBatch ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                          Creating Batch...
-                        </>
-                      ) : (
-                        <>
-                          <Package className="w-5 h-5 mr-2" />
-                          Make This Batch
-                        </>
-                      )}
+                      Calculate
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {scaledRecipe && (
+                  <div className="border-2 border-orange-200 rounded-xl p-4 space-y-3 bg-orange-50/50">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-gray-900">Scaled Recipe</span>
+                      <span className="text-xs text-gray-600 bg-white px-2 py-1 rounded-lg">
+                        {scaledRecipe.factor.toFixed(2)}x
+                      </span>
+                    </div>
+                    {scaledRecipe.ingredients.map((ing, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-sm">
+                        <span className="text-gray-700">{ing.name}</span>
+                        <span className="font-semibold text-orange-600">
+                          {showGrams ? `${ing.amount}${ing.unit}` : `${(ing.amount / 453.592).toFixed(2)}lbs`}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="pt-3 border-t border-orange-200">
+                      <button
+                        onClick={makeBatch}
+                        disabled={makingBatch}
+                        className="w-full btn-touch bg-green-600 text-white active:bg-green-700 disabled:opacity-50"
+                      >
+                        {makingBatch ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                            Creating Batch...
+                          </>
+                        ) : (
+                          <>
+                            <Package className="w-5 h-5 mr-2" />
+                            Make This Batch
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                Add a recipe before using the batch calculator.
+              </div>
+            )}
           </div>
         </div>
       </div>

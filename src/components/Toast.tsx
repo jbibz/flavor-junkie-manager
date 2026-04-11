@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
-
-export type ToastType = 'success' | 'error' | 'warning' | 'info';
-
-export interface ToastMessage {
-  id: string;
-  type: ToastType;
-  message: string;
-  duration?: number;
-}
+import type { ToastMessage } from '../lib/toast';
 
 interface ToastProps {
   toasts: ToastMessage[];
@@ -80,15 +72,4 @@ export default function Toast({ toasts, onRemove }: ToastProps) {
       ))}
     </div>
   );
-}
-
-let toastIdCounter = 0;
-
-export function createToast(type: ToastType, message: string, duration?: number): ToastMessage {
-  return {
-    id: `toast-${++toastIdCounter}-${Date.now()}`,
-    type,
-    message,
-    duration
-  };
 }

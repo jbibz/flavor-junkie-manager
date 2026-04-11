@@ -3,11 +3,44 @@ import { query } from '../db';
 
 const router = Router();
 
+function parseInteger(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : fallback;
+}
+
+function parseDecimal(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeProductPayload(body: Record<string, unknown>) {
+  return {
+    name: String(body.name || '').trim(),
+    size: String(body.size || '').trim(),
+    current_stock: parseInteger(body.current_stock, 0),
+    min_stock_level: parseInteger(body.min_stock_level, 0),
+    lid_color: String(body.lid_color || '').trim(),
+    bottle_type: String(body.bottle_type || '').trim(),
+    price: parseDecimal(body.price, 0),
+    description: String(body.description || '').trim(),
+  };
+}
+
+function validateProductPayload(payload: ReturnType<typeof normalizeProductPayload>) {
+  if (!payload.name || !payload.size || !payload.lid_color || !payload.bottle_type) {
+    return 'Name, size, lid color, and bottle type are required';
+  }
+
+  if (payload.current_stock < 0 || payload.min_stock_level < 0 || payload.price < 0) {
+    return 'Stock, minimum stock, and price must be 0 or greater';
+  }
+
+  return null;
+}
+
 router.get('/', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM products ORDER BY name ASC'
-    );
+    const result = await query('SELECT * FROM products ORDER BY name ASC, size ASC');
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -86,12 +119,30 @@ router.put('/:id/recipe', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku } = req.body;
+    const payload = normalizeProductPayload(req.body || {});
+    const validationError = validateProductPayload(payload);
+
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     const result = await query(
-      `INSERT INTO products (name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [name, current_stock, min_stock_level, unit, shopify_variant_id || null, shopify_sku || null]
+      `INSERT INTO products
+        (name, size, current_stock, min_stock_level, lid_color, bottle_type, price, description)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        payload.name,
+        payload.size,
+        payload.current_stock,
+        payload.min_stock_level,
+        payload.lid_color,
+        payload.bottle_type,
+        payload.price,
+        payload.description,
+      ]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating product:', error);
@@ -102,23 +153,43 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, current_stock, min_stock_level, unit, shopify_variant_id, shopify_sku } = req.body;
+    const payload = normalizeProductPayload(req.body || {});
+    const validationError = validateProductPayload(payload);
+
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     const result = await query(
       `UPDATE products
        SET name = $1,
-           current_stock = $2,
-           min_stock_level = $3,
-           unit = $4,
-           shopify_variant_id = $5,
-           shopify_sku = $6,
+           size = $2,
+           current_stock = $3,
+           min_stock_level = $4,
+           lid_color = $5,
+           bottle_type = $6,
+           price = $7,
+           description = $8,
            updated_at = NOW()
-       WHERE id = $7
+       WHERE id = $9
        RETURNING *`,
-      [name, current_stock, min_stock_level, unit, shopify_variant_id || null, shopify_sku || null, id]
+      [
+        payload.name,
+        payload.size,
+        payload.current_stock,
+        payload.min_stock_level,
+        payload.lid_color,
+        payload.bottle_type,
+        payload.price,
+        payload.description,
+        id,
+      ]
     );
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating product:', error);
@@ -137,36 +208,6 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting product:', error);
     res.status(500).json({ error: 'Failed to delete product' });
-  }
-});
-
-router.post('/:id/components', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { component_name, quantity_used, cost, batch_number } = req.body;
-
-    const result = await query(
-      'INSERT INTO component_purchases (product_id, component_name, quantity_used, cost, batch_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [id, component_name, quantity_used, cost, batch_number]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error('Error adding component:', error);
-    res.status(500).json({ error: 'Failed to add component' });
-  }
-});
-
-router.get('/:id/components', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await query(
-      'SELECT * FROM component_purchases WHERE product_id = $1 ORDER BY purchase_date DESC',
-      [id]
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching components:', error);
-    res.status(500).json({ error: 'Failed to fetch components' });
   }
 });
 
