@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Loader2 } from 'lucide-react';
 import { useProducts, useComponents } from '../lib/hooks';
 import { api } from '../lib/api';
+import type { Component, Product } from '../lib/database.types';
 
 interface QuickBatchModalProps {
   onClose: () => void;
@@ -45,15 +46,19 @@ export default function QuickBatchModal({ onClose, onSuccess }: QuickBatchModalP
 
     const lidComponent = components.find(c => c.category === 'lids' && c.type === lidKey);
     const bottleComponent = components.find(c => c.category === 'bottles' && c.type === bottleKey);
+    const labelComponent = findLabelComponent(product, components);
+    const labelKey = labelComponent?.type ?? getProductLabelCandidates(product)[0];
 
-    if (!lidComponent || !bottleComponent) {
+    if (!lidComponent || !bottleComponent || !labelComponent) {
       setError('Missing component data');
       setLoading(false);
       return;
     }
 
-    if (lidComponent.quantity < desired || bottleComponent.quantity < desired) {
-      setError(`Insufficient components: Need ${desired} of each. Available: ${lidComponent.quantity} lids, ${bottleComponent.quantity} bottles`);
+    if (lidComponent.quantity < desired || bottleComponent.quantity < desired || labelComponent.quantity < desired) {
+      setError(
+        `Insufficient components: Need ${desired} of each. Available: ${lidComponent.quantity} lids, ${bottleComponent.quantity} bottles, ${labelComponent.quantity} labels`
+      );
       setLoading(false);
       return;
     }
@@ -66,21 +71,15 @@ export default function QuickBatchModal({ onClose, onSuccess }: QuickBatchModalP
         quantity_made: desired,
         components_used: {
           lids: `${lidKey}: ${desired}`,
-          bottles: `${bottleKey}: ${desired}`
+          bottles: `${bottleKey}: ${desired}`,
+          labels: `${labelKey}: ${desired}`
         },
-        notes: ''
-      });
-
-      await api.components.update(lidComponent.id, {
-        quantity: lidComponent.quantity - desired,
-        average_cost: lidComponent.average_cost,
-        total_value: (lidComponent.quantity - desired) * lidComponent.average_cost
-      });
-
-      await api.components.update(bottleComponent.id, {
-        quantity: bottleComponent.quantity - desired,
-        average_cost: bottleComponent.average_cost,
-        total_value: (bottleComponent.quantity - desired) * bottleComponent.average_cost
+        notes: '',
+        component_adjustments: [
+          { component_id: lidComponent.id, quantity_delta: -desired },
+          { component_id: bottleComponent.id, quantity_delta: -desired },
+          { component_id: labelComponent.id, quantity_delta: -desired },
+        ],
       });
 
       onSuccess(`Created ${desired} units of ${product.name}`);
@@ -96,10 +95,12 @@ export default function QuickBatchModal({ onClose, onSuccess }: QuickBatchModalP
     const bottleKey = selectedProduct.bottle_type.toLowerCase();
     const lidComponent = components.find(c => c.category === 'lids' && c.type === lidKey);
     const bottleComponent = components.find(c => c.category === 'bottles' && c.type === bottleKey);
+    const labelComponent = findLabelComponent(selectedProduct, components);
     const desired = parseInt(quantity) || 0;
-    return lidComponent && bottleComponent &&
+    return lidComponent && bottleComponent && labelComponent &&
            lidComponent.quantity >= desired &&
-           bottleComponent.quantity >= desired;
+           bottleComponent.quantity >= desired &&
+           labelComponent.quantity >= desired;
   })());
 
   return (
@@ -156,6 +157,37 @@ interface ModalContentProps {
   loading: boolean;
   onClose: () => void;
   onSubmit: () => void;
+}
+
+function slugifyName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function getProductLabelCandidates(product: Product) {
+  const base = slugifyName(product.name);
+  const normalizedHeat = base.replace('_plus_heat', '_heat');
+  const uniqueBases = Array.from(new Set([normalizedHeat, base]));
+
+  if (product.size === 'Big') {
+    return uniqueBases.map((value) => `${value}_big`);
+  }
+
+  return uniqueBases;
+}
+
+function findLabelComponent(product: Product, components: Component[]) {
+  const labels = components.filter((component) => component.category === 'labels');
+  const candidates = getProductLabelCandidates(product);
+
+  for (const candidate of candidates) {
+    const exact = labels.find((label) => label.type === candidate);
+    if (exact) return exact;
+  }
+
+  return labels.find((label) => candidates.some((candidate) => label.type.includes(candidate))) ?? null;
 }
 
 function ModalContent({

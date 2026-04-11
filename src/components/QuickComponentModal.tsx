@@ -40,13 +40,6 @@ export default function QuickComponentModal({ onClose, onSuccess }: QuickCompone
     setLoading(true);
     setError('');
 
-    const costPerUnitValue = paid / qty;
-    const oldQty = selectedComponent.quantity;
-    const oldCost = selectedComponent.average_cost;
-    const newQty = oldQty + qty;
-    const newAvgCost = (oldQty * oldCost + qty * costPerUnitValue) / newQty;
-    const newTotalValue = newQty * newAvgCost;
-
     try {
       await api.components.addPurchase(selectedComponent.id, {
         quantity: qty,

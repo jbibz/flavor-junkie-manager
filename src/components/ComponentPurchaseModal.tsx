@@ -5,13 +5,14 @@ import type { Component } from '../lib/database.types';
 interface ComponentPurchaseModalProps {
   component: Component;
   onClose: () => void;
-  onSave: (quantity: number, totalPaid: number) => void;
+  onSave: (quantity: number, totalPaid: number) => Promise<void>;
 }
 
 export default function ComponentPurchaseModal({ component, onClose, onSave }: ComponentPurchaseModalProps) {
   const [quantity, setQuantity] = useState('');
   const [totalPaid, setTotalPaid] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -23,13 +24,19 @@ export default function ComponentPurchaseModal({ component, onClose, onSave }: C
   const costPerUnit = quantity && totalPaid ? (parseFloat(totalPaid) / parseFloat(quantity)).toFixed(2) : '0.00';
   const canSave = quantity && totalPaid && parseFloat(quantity) > 0 && parseFloat(totalPaid) > 0;
 
-  function handleSave() {
+  async function handleSave() {
     const qty = parseInt(quantity);
     const paid = parseFloat(totalPaid);
 
     if (qty > 0 && paid > 0) {
       setLoading(true);
-      onSave(qty, paid);
+      setError('');
+      try {
+        await onSave(qty, paid);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save purchase');
+        setLoading(false);
+      }
     }
   }
 
@@ -48,6 +55,7 @@ export default function ComponentPurchaseModal({ component, onClose, onSave }: C
             costPerUnit={costPerUnit}
             loading={loading}
             canSave={!!canSave}
+            error={error}
             onClose={onClose}
             onSubmit={handleSave}
           />
@@ -65,6 +73,7 @@ export default function ComponentPurchaseModal({ component, onClose, onSave }: C
           costPerUnit={costPerUnit}
           loading={loading}
           canSave={!!canSave}
+          error={error}
           onClose={onClose}
           onSubmit={handleSave}
         />
@@ -82,6 +91,7 @@ interface ModalContentProps {
   costPerUnit: string;
   loading: boolean;
   canSave: boolean;
+  error: string;
   onClose: () => void;
   onSubmit: () => void;
 }
@@ -95,6 +105,7 @@ function ModalContent({
   costPerUnit,
   loading,
   canSave,
+  error,
   onClose,
   onSubmit
 }: ModalContentProps) {
@@ -158,6 +169,12 @@ function ModalContent({
               <span className="text-gray-600">New stock:</span>
               <span className="font-semibold text-green-600">{component.quantity + parseInt(quantity || '0')}</span>
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
       </div>

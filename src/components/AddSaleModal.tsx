@@ -26,6 +26,7 @@ export default function AddSaleModal({ onClose, onSave }: AddSaleModalProps) {
   const [items, setItems] = useState<SaleItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -76,6 +77,7 @@ export default function AddSaleModal({ onClose, onSave }: AddSaleModalProps) {
 
   async function handleSave() {
     setLoading(true);
+    setError('');
     try {
       const itemsWithStock = items.filter(item => item.startingStock > 0);
 
@@ -99,6 +101,7 @@ export default function AddSaleModal({ onClose, onSave }: AddSaleModalProps) {
       onSave();
     } catch (error) {
       console.error('Error saving sales event:', error);
+      setError(error instanceof Error ? error.message : 'Failed to save sales event');
     } finally {
       setLoading(false);
     }
@@ -127,6 +130,7 @@ export default function AddSaleModal({ onClose, onSave }: AddSaleModalProps) {
             totalRevenue={totalRevenue}
             canSave={canSave}
             loading={loading}
+            error={error}
             onRemoveItem={removeItem}
             onUpdateItem={updateItem}
             onClose={onClose}
@@ -150,6 +154,7 @@ export default function AddSaleModal({ onClose, onSave }: AddSaleModalProps) {
           totalRevenue={totalRevenue}
           canSave={canSave}
           loading={loading}
+          error={error}
           onRemoveItem={removeItem}
           onUpdateItem={updateItem}
           onClose={onClose}
@@ -173,6 +178,7 @@ interface ModalContentProps {
   totalRevenue: number;
   canSave: boolean;
   loading: boolean;
+  error: string;
   onRemoveItem: (index: number) => void;
   onUpdateItem: (index: number, field: keyof SaleItem, value: string | number | null) => void;
   onClose: () => void;
@@ -192,6 +198,7 @@ function ModalContent({
   totalRevenue,
   canSave,
   loading,
+  error,
   onRemoveItem,
   onUpdateItem,
   onClose,
@@ -357,6 +364,12 @@ function ModalContent({
               </div>
               <span className="text-2xl font-bold text-orange-600">${totalRevenue.toFixed(2)}</span>
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
+import { api } from '../lib/api';
 import type { ProductionHistory } from '../lib/database.types';
 
 interface EditProductionModalProps {
@@ -36,38 +37,18 @@ export default function EditProductionModal({
 
     try {
       const newQuantity = parseInt(quantityMade);
-      const oldQuantity = record.quantity_made;
-      const quantityDiff = newQuantity - oldQuantity;
-
-      const { error: updateError } = await supabase
-        .from('production_history')
-        .update({
-          production_date: productionDate,
-          quantity_made: newQuantity,
-          notes: notes.trim(),
-        })
-        .eq('id', record.id);
-
-      if (updateError) throw updateError;
-
-      if (quantityDiff !== 0) {
-        const { data: product } = await supabase
-          .from('products')
-          .select('current_stock')
-          .eq('id', record.product_id)
-          .single();
-
-        if (product) {
-          const { error: stockError } = await supabase
-            .from('products')
-            .update({
-              current_stock: product.current_stock + quantityDiff,
-            })
-            .eq('id', record.product_id);
-
-          if (stockError) throw stockError;
-        }
+      if (!Number.isInteger(newQuantity) || newQuantity <= 0) {
+        throw new Error('Quantity made must be greater than 0');
       }
+
+      await api.production.update(record.id, {
+        production_date: productionDate,
+        product_id: record.product_id,
+        product_name: record.product_name,
+        quantity_made: newQuantity,
+        components_used: record.components_used as Record<string, string>,
+        notes: notes.trim(),
+      });
 
       onSuccess();
       onClose();
