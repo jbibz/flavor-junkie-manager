@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, PieChart } from 'lucide-react';
 import { api } from '../lib/api';
+import type { SalesEvent, SalesItem } from '../lib/database.types';
 
 interface AnalyticsData {
   totalUnits: number;
@@ -82,27 +83,27 @@ export default function SalesAnalytics() {
     }
 
     try {
-      let events = await api.sales.getEvents();
+      let events: SalesEvent[] = await api.sales.getEvents();
       if (startDate && events) {
-        events = events.filter((e: any) => e.event_date >= startDate && e.event_date <= endDate);
+        events = events.filter((event) => event.event_date >= startDate && event.event_date <= endDate);
       }
 
-      const eventIds = events?.map((e: any) => e.id) || [];
+      const eventIds = events.map((event) => event.id);
 
-      let items = await api.sales.getItems();
+      let items: SalesItem[] = await api.sales.getItems();
       if (eventIds.length > 0 && items) {
-        items = items.filter((i: any) => eventIds.includes(i.sales_event_id));
+        items = items.filter((item) => eventIds.includes(item.sales_event_id));
       } else if (startDate) {
         items = [];
       }
 
-      const totalRevenue = events?.reduce((sum: number, e: any) => sum + Number(e.total_revenue), 0) || 0;
-      const totalUnits = items?.reduce((sum: number, i: any) => sum + i.quantity_sold, 0) || 0;
-      const marketDays = events?.length || 0;
+      const totalRevenue = events.reduce((sum, event) => sum + Number(event.total_revenue), 0);
+      const totalUnits = items.reduce((sum, item) => sum + item.quantity_sold, 0);
+      const marketDays = events.length;
       const avgPerMarket = marketDays > 0 ? totalRevenue / marketDays : 0;
 
       const productMap = new Map<string, { units: number; revenue: number }>();
-      items?.forEach((item: any) => {
+      items.forEach((item) => {
         const existing = productMap.get(item.product_name) || { units: 0, revenue: 0 };
         productMap.set(item.product_name, {
           units: existing.units + item.quantity_sold,
@@ -111,14 +112,21 @@ export default function SalesAnalytics() {
       });
 
       const productBreakdown = Array.from(productMap.entries())
-        .map(([name, data]) => ({ name, ...data }))
+        .map(([name, breakdown]) => ({ name, ...breakdown }))
         .sort((a, b) => b.units - a.units);
 
-      const salesTrend = events?.map((e: any) => ({
-        date: e.event_date,
-        units: items?.filter((i: any) => i.sales_event_id === e.id).reduce((sum: number, i: any) => sum + i.quantity_sold, 0) || 0,
-        revenue: Number(e.total_revenue)
-      })).sort((a: any, b: any) => a.date.localeCompare(b.date)) || [];
+      const unitsByEventId = new Map<string, number>();
+      for (const item of items) {
+        unitsByEventId.set(item.sales_event_id, (unitsByEventId.get(item.sales_event_id) || 0) + item.quantity_sold);
+      }
+
+      const salesTrend = events
+        .map((event) => ({
+          date: event.event_date,
+          units: unitsByEventId.get(event.id) || 0,
+          revenue: Number(event.total_revenue)
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
 
       setData({
         totalUnits,

@@ -11,7 +11,8 @@ import FloatingActionButton from './components/FloatingActionButton';
 import QuickBatchModal from './components/QuickBatchModal';
 import QuickComponentModal from './components/QuickComponentModal';
 import AddSaleModal from './components/AddSaleModal';
-import Toast, { ToastMessage, createToast, ToastType } from './components/Toast';
+import Toast from './components/Toast';
+import { createToast, type ToastMessage, type ToastType } from './lib/toast';
 
 type Page = 'dashboard' | 'inventory' | 'sales' | 'analytics' | 'production' | 'product-detail';
 type QuickAction = 'batch' | 'components' | 'sale' | null;

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Loader2, X, Edit2 } from 'lucide-react
 import { useSalesEvents } from '../lib/hooks';
 import { api } from '../lib/api';
 import type { SalesEvent } from '../lib/database.types';
-import type { ToastType } from '../components/Toast';
+import type { ToastType } from '../lib/toast';
 import AddSaleModal from '../components/AddSaleModal';
 import EditSaleModal from '../components/EditSaleModal';
 

@@ -29,6 +29,7 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -81,6 +82,7 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
 
   async function handleSave() {
     setSaving(true);
+    setError('');
     try {
       await api.sales.updateEvent(event.id, {
         event_name: eventName,
@@ -99,17 +101,20 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
       onSave();
     } catch (error) {
       console.error('Error saving sales event:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update sales event');
       setSaving(false);
     }
   }
 
   async function handleDelete() {
     setDeleting(true);
+    setError('');
     try {
       await api.sales.deleteEvent(event.id);
       onSave();
     } catch (error) {
       console.error('Error deleting sales event:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete sales event');
       setDeleting(false);
     }
   }
@@ -138,6 +143,7 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
             loading={loading}
             saving={saving}
             deleting={deleting}
+            error={error}
             showDeleteConfirm={showDeleteConfirm}
             setShowDeleteConfirm={setShowDeleteConfirm}
             onUpdateItem={updateItem}
@@ -164,6 +170,7 @@ export default function EditSaleModal({ event, onClose, onSave }: EditSaleModalP
           loading={loading}
           saving={saving}
           deleting={deleting}
+          error={error}
           showDeleteConfirm={showDeleteConfirm}
           setShowDeleteConfirm={setShowDeleteConfirm}
           onUpdateItem={updateItem}
@@ -190,6 +197,7 @@ interface ModalContentProps {
   loading: boolean;
   saving: boolean;
   deleting: boolean;
+  error: string;
   showDeleteConfirm: boolean;
   setShowDeleteConfirm: (show: boolean) => void;
   onUpdateItem: (index: number, field: keyof SaleItem, value: string | number | null) => void;
@@ -212,6 +220,7 @@ function ModalContent({
   loading,
   saving,
   deleting,
+  error,
   showDeleteConfirm,
   setShowDeleteConfirm,
   onUpdateItem,
@@ -372,6 +381,12 @@ function ModalContent({
               </div>
               <span className="text-2xl font-bold text-orange-600">${totalRevenue.toFixed(2)}</span>
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 

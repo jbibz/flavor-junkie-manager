@@ -9,3 +9,8 @@ script = ""
 name = "Run"
 icon = "run"
 command = "npm run build"
+
+[[actions]]
+name = "s"
+icon = "tool"
+command = "npm install"

@@ -11,13 +11,15 @@ export function useProducts() {
   }, []);
 
   async function loadProducts() {
+    setLoading(true);
     try {
       const data = await api.products.getAll();
       if (data) setProducts(data);
     } catch (error) {
       console.error('Error loading products:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return { products, loading, reload: loadProducts };
@@ -32,13 +34,15 @@ export function useComponents() {
   }, []);
 
   async function loadComponents() {
+    setLoading(true);
     try {
       const data = await api.components.getAll();
       if (data) setComponents(data);
     } catch (error) {
       console.error('Error loading components:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return { components, loading, reload: loadComponents };
@@ -50,10 +54,18 @@ export function useProduct(id: string | undefined) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (id) loadProduct(id);
+    if (id) {
+      loadProduct(id);
+      return;
+    }
+
+    setProduct(null);
+    setRecipe(null);
+    setLoading(false);
   }, [id]);
 
   async function loadProduct(productId: string) {
+    setLoading(true);
     try {
       const [productData, recipeData] = await Promise.all([
         api.products.getOne(productId),
@@ -64,8 +76,9 @@ export function useProduct(id: string | undefined) {
       setRecipe(recipeData);
     } catch (error) {
       console.error('Error loading product:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return { product, recipe, loading, reload: () => id && loadProduct(id) };
@@ -80,6 +93,7 @@ export function useSalesEvents(month?: string) {
   }, [month]);
 
   async function loadEvents() {
+    setLoading(true);
     try {
       let data = await api.sales.getEvents();
 
@@ -97,8 +111,9 @@ export function useSalesEvents(month?: string) {
       if (data) setEvents(data);
     } catch (error) {
       console.error('Error loading sales events:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return { events, loading, reload: loadEvents };
@@ -113,6 +128,7 @@ export function useProductionHistory(productId?: string) {
   }, [productId]);
 
   async function loadHistory() {
+    setLoading(true);
     try {
       let data = await api.production.getAll();
 
@@ -123,8 +139,9 @@ export function useProductionHistory(productId?: string) {
       if (data) setHistory(data);
     } catch (error) {
       console.error('Error loading production history:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return { history, loading, reload: loadHistory, refresh: loadHistory };
@@ -144,13 +161,15 @@ export function useDashboardStats() {
   }, []);
 
   async function loadStats() {
+    setLoading(true);
     try {
       const data = await api.dashboard.getStats();
       setStats(data);
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return { stats, loading };
