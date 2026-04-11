@@ -96,6 +96,15 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
 export const api = {
   products: {
+    getAll: () => fetchAPI('/products'),
+    getOne: (id: string) => fetchAPI(`/products/${id}`),
+    getRecipe: (id: string) => fetchAPI(`/products/${id}/recipe`),
+    updateRecipe: (id: string, data: any) => fetchAPI(`/products/${id}/recipe`, { method: 'PUT', body: JSON.stringify(data) }),
+    create: (data: any) => fetchAPI('/products', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) => fetchAPI(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: string) => fetchAPI(`/products/${id}`, { method: 'DELETE' }),
+    addComponent: (id: string, data: any) => fetchAPI(`/products/${id}/components`, { method: 'POST', body: JSON.stringify(data) }),
+    getComponents: (id: string) => fetchAPI(`/products/${id}/components`),
     getAll: () => fetchAPI<Product[]>('/products'),
     getOne: (id: string) => fetchAPI<Product>(`/products/${id}`),
     getRecipe: (id: string) => fetchAPI<Recipe>(`/products/${id}/recipe`),
