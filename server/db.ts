@@ -18,7 +18,6 @@ const poolConfig = process.env.DATABASE_URL
       database: process.env.DB_NAME || 'flavor_junkie',
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
-      ssl: process.env.DB_HOST?.includes('supabase.co') ? { rejectUnauthorized: false } : undefined,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
