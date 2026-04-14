@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Calculator, Package, Loader2 } from 'lucide-react';
 import { useProduct, useComponents, useProductionHistory } from '../lib/hooks';
 import { api } from '../lib/api';
 import type { RecipeIngredient, Product, Component } from '../lib/database.types';
 import type { ToastType } from '../lib/toast';
 import UnitToggle from '../components/UnitToggle';
-import EditProductModal from '../components/EditProductModal';
 
 interface ProductDetailProps {
   productId: string | undefined;
@@ -22,26 +21,8 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
   const [expandedSections, setExpandedSections] = useState<string[]>(['margin']);
   const [makingBatch, setMakingBatch] = useState(false);
   const [showGrams, setShowGrams] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingIngredients, setEditingIngredients] = useState<RecipeIngredient[]>([]);
-  const [editingBatchSize, setEditingBatchSize] = useState('');
-  const [editingMaterialQuantities, setEditingMaterialQuantities] = useState<Record<string, string>>({});
-  const [savingEdits, setSavingEdits] = useState(false);
 
   const ingredients = (recipe?.ingredients as unknown as RecipeIngredient[]) || [];
-
-  useEffect(() => {
-    if (!isEditing || !recipe) return;
-
-    setEditingIngredients(
-      (recipe.ingredients as unknown as RecipeIngredient[]).map((ingredient) => ({
-        name: ingredient.name,
-        amount: Number(ingredient.amount) || 0,
-        unit: ingredient.unit || 'g'
-      }))
-    );
-    setEditingBatchSize(String(recipe.original_batch_size || ''));
-  }, [isEditing, recipe]);
 
   if (loading || !product) {
     return (
@@ -147,95 +128,6 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
   const bottleComponent = components.find(c => c.category === 'bottles' && c.type === product.bottle_type.toLowerCase());
   const labelComponent = findLabelComponent(product, components);
 
-  function startEditing() {
-    setEditingIngredients(
-      ingredients.map((ingredient) => ({
-        name: ingredient.name,
-        amount: Number(ingredient.amount) || 0,
-        unit: ingredient.unit || 'g'
-      }))
-    );
-    setEditingBatchSize(String(recipe.original_batch_size || ''));
-    setEditingMaterialQuantities({});
-    setIsEditing(true);
-  }
-
-  function cancelEditing() {
-    setIsEditing(false);
-    setEditingMaterialQuantities({});
-  }
-
-  function updateIngredientAmount(index: number, value: string) {
-    setEditingIngredients((prev) => {
-      const next = [...prev];
-      const parsed = Number(value);
-      const fallback = ingredients[index] || { name: '', amount: 0, unit: 'g' };
-      next[index] = {
-        ...(next[index] || fallback),
-        amount: Number.isFinite(parsed) ? parsed : 0
-      };
-      return next;
-    });
-  }
-
-  function setMaterialQuantity(componentId: string, value: string) {
-    setEditingMaterialQuantities((prev) => ({ ...prev, [componentId]: value }));
-  }
-
-  async function saveEdits() {
-    if (!product || !recipe) return;
-
-    const parsedBatchSize = Number(editingBatchSize);
-    if (!Number.isInteger(parsedBatchSize) || parsedBatchSize <= 0) {
-      showToast?.('error', 'Original batch size must be a whole number greater than 0');
-      return;
-    }
-
-    if (editingIngredients.length === 0 || editingIngredients.some((ingredient) => !Number.isFinite(ingredient.amount) || ingredient.amount <= 0)) {
-      showToast?.('error', 'All recipe ingredient amounts must be greater than 0');
-      return;
-    }
-
-    setSavingEdits(true);
-    try {
-      await api.products.updateRecipe(product.id, {
-        ingredients: editingIngredients,
-        original_batch_size: parsedBatchSize
-      });
-
-      const quantityUpdates = Object.entries(editingMaterialQuantities)
-        .map(([componentId, value]) => {
-          const component = components.find((item) => item.id === componentId);
-          const quantity = Number(value);
-          if (!component || value.trim() === '') return null;
-          if (!Number.isInteger(quantity) || quantity < 0) {
-            throw new Error('Material quantities must be whole numbers 0 or greater');
-          }
-
-          return api.components.update(component.id, {
-            quantity,
-            average_cost: component.average_cost,
-            total_value: quantity * asNumber(component.average_cost)
-          });
-        })
-        .filter(Boolean);
-
-      await Promise.all(quantityUpdates as Promise<unknown>[]);
-      await Promise.all([reloadProduct(), reloadComponents()]);
-      setEditingMaterialQuantities({});
-      setIsEditing(false);
-      showToast?.('success', 'Product recipe and materials updated');
-    } catch (error) {
-      if (error instanceof Error) {
-        showToast?.('error', error.message);
-      } else {
-        showToast?.('error', 'Failed to save product edits');
-      }
-    } finally {
-      setSavingEdits(false);
-    }
-  }
-
   const lidAverageCost = asNumber(lidComponent?.average_cost);
   const bottleAverageCost = asNumber(bottleComponent?.average_cost);
   const productPrice = asNumber(product.price);
@@ -285,23 +177,14 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
             <MaterialStockRow
               label={`Lid (${product.lid_color})`}
               component={lidComponent}
-              isEditing={isEditing}
-              value={lidComponent ? (editingMaterialQuantities[lidComponent.id] ?? String(lidComponent.quantity)) : ''}
-              onChange={setMaterialQuantity}
             />
             <MaterialStockRow
               label={`Bottle (${product.bottle_type})`}
               component={bottleComponent}
-              isEditing={isEditing}
-              value={bottleComponent ? (editingMaterialQuantities[bottleComponent.id] ?? String(bottleComponent.quantity)) : ''}
-              onChange={setMaterialQuantity}
             />
             <MaterialStockRow
               label="Label"
               component={labelComponent}
-              isEditing={isEditing}
-              value={labelComponent ? (editingMaterialQuantities[labelComponent.id] ?? String(labelComponent.quantity)) : ''}
-              onChange={setMaterialQuantity}
             />
           </div>
         </div>
@@ -551,35 +434,6 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
         )}
       </div>
 
-      {!isEditing && (
-        <div className="hidden md:flex fixed bottom-6 right-6 z-40">
-          <button
-            onClick={startEditing}
-            className="px-5 py-3 rounded-xl bg-[#1e3a5f] text-white font-semibold shadow-lg hover:bg-[#244872] transition-colors"
-          >
-            Edit Product
-          </button>
-        </div>
-      )}
-
-      {isEditing && (
-        <div className="hidden md:flex fixed bottom-6 right-6 z-40 gap-3">
-          <button
-            onClick={cancelEditing}
-            disabled={savingEdits}
-            className="px-5 py-3 rounded-xl bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={saveEdits}
-            disabled={savingEdits}
-            className="px-5 py-3 rounded-xl bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-          >
-            {savingEdits ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -623,18 +477,9 @@ function findLabelComponent(product: Product, components: Component[]) {
 interface MaterialStockRowProps {
   label: string;
   component: Component | null | undefined;
-  isEditing: boolean;
-  value: string;
-  onChange: (componentId: string, value: string) => void;
 }
 
-function MaterialStockRow({
-  label,
-  component,
-  isEditing,
-  value,
-  onChange
-}: MaterialStockRowProps) {
+function MaterialStockRow({ label, component }: MaterialStockRowProps) {
   if (!component) {
     return (
       <div className="p-3 bg-red-50 rounded-xl border border-red-100">
@@ -646,23 +491,10 @@ function MaterialStockRow({
 
   return (
     <div className="p-3 bg-gray-50 rounded-xl">
-      <div className="flex justify-between items-center gap-3 mb-2">
+      <div className="flex justify-between items-center gap-3">
         <span className="text-sm text-gray-700">{label}</span>
         <span className="font-semibold text-gray-900">{component.quantity}</span>
       </div>
-      {isEditing && (
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min="0"
-            step="1"
-            inputMode="numeric"
-            value={value}
-            onChange={(event) => onChange(component.id, event.target.value)}
-            className="input-touch flex-1 h-10 text-sm"
-          />
-        </div>
-      )}
     </div>
   );
 }
