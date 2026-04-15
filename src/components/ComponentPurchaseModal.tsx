@@ -8,6 +8,8 @@ interface ComponentPurchaseModalProps {
   onSave: (quantity: number, totalPaid: number) => Promise<void>;
 }
 
+const GRAMS_PER_POUND = 453.592;
+
 export default function ComponentPurchaseModal({ component, onClose, onSave }: ComponentPurchaseModalProps) {
   const [quantity, setQuantity] = useState('');
   const [totalPaid, setTotalPaid] = useState('');
@@ -21,22 +23,28 @@ export default function ComponentPurchaseModal({ component, onClose, onSave }: C
     };
   }, []);
 
-  const costPerUnit = quantity && totalPaid ? (parseFloat(totalPaid) / parseFloat(quantity)).toFixed(2) : '0.00';
-  const canSave = quantity && totalPaid && parseFloat(quantity) > 0 && parseFloat(totalPaid) > 0;
+  const isSeasoning = component.category === 'seasonings';
+  const parsedQuantity = Number(quantity);
+  const normalizedQuantity = isSeasoning
+    ? Math.round((Number.isFinite(parsedQuantity) ? parsedQuantity : 0) * GRAMS_PER_POUND)
+    : parseInt(quantity || '0');
+  const paid = Number(totalPaid);
+
+  const costPerUnit =
+    normalizedQuantity > 0 && Number.isFinite(paid) && paid > 0 ? paid / normalizedQuantity : 0;
+  const canSave = normalizedQuantity > 0 && Number.isFinite(paid) && paid > 0;
 
   async function handleSave() {
-    const qty = parseInt(quantity);
-    const paid = parseFloat(totalPaid);
+    if (!canSave) return;
 
-    if (qty > 0 && paid > 0) {
-      setLoading(true);
-      setError('');
-      try {
-        await onSave(qty, paid);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save purchase');
-        setLoading(false);
-      }
+    setLoading(true);
+    setError('');
+
+    try {
+      await onSave(normalizedQuantity, paid);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save purchase');
+      setLoading(false);
     }
   }
 
@@ -53,8 +61,10 @@ export default function ComponentPurchaseModal({ component, onClose, onSave }: C
             totalPaid={totalPaid}
             setTotalPaid={setTotalPaid}
             costPerUnit={costPerUnit}
+            normalizedQuantity={normalizedQuantity}
+            isSeasoning={isSeasoning}
             loading={loading}
-            canSave={!!canSave}
+            canSave={canSave}
             error={error}
             onClose={onClose}
             onSubmit={handleSave}
@@ -71,8 +81,10 @@ export default function ComponentPurchaseModal({ component, onClose, onSave }: C
           totalPaid={totalPaid}
           setTotalPaid={setTotalPaid}
           costPerUnit={costPerUnit}
+          normalizedQuantity={normalizedQuantity}
+          isSeasoning={isSeasoning}
           loading={loading}
-          canSave={!!canSave}
+          canSave={canSave}
           error={error}
           onClose={onClose}
           onSubmit={handleSave}
@@ -88,7 +100,9 @@ interface ModalContentProps {
   setQuantity: (qty: string) => void;
   totalPaid: string;
   setTotalPaid: (paid: string) => void;
-  costPerUnit: string;
+  costPerUnit: number;
+  normalizedQuantity: number;
+  isSeasoning: boolean;
   loading: boolean;
   canSave: boolean;
   error: string;
@@ -103,13 +117,15 @@ function ModalContent({
   totalPaid,
   setTotalPaid,
   costPerUnit,
+  normalizedQuantity,
+  isSeasoning,
   loading,
   canSave,
   error,
   onClose,
   onSubmit
 }: ModalContentProps) {
-  const componentName = component.type.charAt(0).toUpperCase() + component.type.slice(1).replace(/_/g, ' ');
+  const componentName = formatComponentName(component.type);
   const categoryName = component.category.charAt(0).toUpperCase() + component.category.slice(1);
 
   return (
@@ -126,14 +142,17 @@ function ModalContent({
 
       <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Quantity Purchased</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {isSeasoning ? 'Weight Purchased (lb)' : 'Quantity Purchased'}
+          </label>
           <input
             type="number"
-            inputMode="numeric"
-            min="1"
+            inputMode={isSeasoning ? 'decimal' : 'numeric'}
+            min="0"
+            step={isSeasoning ? '0.01' : '1'}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            placeholder="Enter quantity"
+            placeholder={isSeasoning ? 'Enter pounds' : 'Enter quantity'}
             className="input-touch"
           />
         </div>
@@ -158,16 +177,30 @@ function ModalContent({
         {quantity && totalPaid && (
           <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-700">Cost per unit:</span>
-              <span className="text-lg font-bold text-orange-600">${costPerUnit}</span>
+              <span className="text-sm font-medium text-gray-700">
+                {isSeasoning ? 'Cost per gram:' : 'Cost per unit:'}
+              </span>
+              <span className="text-lg font-bold text-orange-600">
+                ${isSeasoning ? costPerUnit.toFixed(4) : costPerUnit.toFixed(2)}
+              </span>
             </div>
+            {isSeasoning && (
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600">Converted grams:</span>
+                <span className="font-semibold text-gray-900">{normalizedQuantity.toLocaleString()} g</span>
+              </div>
+            )}
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-600">Current stock:</span>
-              <span className="font-semibold text-gray-900">{component.quantity}</span>
+              <span className="font-semibold text-gray-900">
+                {component.quantity.toLocaleString()}{isSeasoning ? ' g' : ''}
+              </span>
             </div>
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-600">New stock:</span>
-              <span className="font-semibold text-green-600">{component.quantity + parseInt(quantity || '0')}</span>
+              <span className="font-semibold text-green-600">
+                {(component.quantity + normalizedQuantity).toLocaleString()}{isSeasoning ? ' g' : ''}
+              </span>
             </div>
           </div>
         )}
@@ -204,4 +237,12 @@ function ModalContent({
       </div>
     </div>
   );
+}
+
+function formatComponentName(type: string) {
+  return type
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }

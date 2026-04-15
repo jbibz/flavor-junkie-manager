@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import type { Component } from '../lib/database.types';
 import ComponentPurchaseModal from '../components/ComponentPurchaseModal';
 import EditComponentModal from '../components/EditComponentModal';
+import AddSeasoningModal from '../components/AddSeasoningModal';
 
 interface InventoryProps {
   onProductClick: (productId: string) => void;
@@ -13,10 +14,11 @@ interface InventoryProps {
 export default function Inventory({ onProductClick }: InventoryProps) {
   const { products, loading: productsLoading } = useProducts();
   const { components, loading: componentsLoading, reload: reloadComponents } = useComponents();
-  const [expandedSections, setExpandedSections] = useState<string[]>(['lids', 'bottles', 'labels']);
+  const [expandedSections, setExpandedSections] = useState<string[]>(['lids', 'bottles', 'labels', 'seasonings']);
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [selectedComponent, setSelectedComponent] = useState<Component | null>(null);
   const [editingComponent, setEditingComponent] = useState<Component | null>(null);
+  const [addingSeasoning, setAddingSeasoning] = useState(false);
 
   function toggleSection(section: string) {
     setExpandedSections(prev =>
@@ -59,9 +61,26 @@ export default function Inventory({ onProductClick }: InventoryProps) {
     await reloadComponents();
   }
 
+  async function handleSeasoningCreate(payload: { name: string; grams: number; totalPaid: number }) {
+    const type = slugifyKey(payload.name);
+    const averageCost = payload.totalPaid / payload.grams;
+
+    await api.components.create({
+      category: 'seasonings',
+      type,
+      quantity: payload.grams,
+      average_cost: averageCost,
+      total_value: payload.totalPaid,
+    });
+
+    await reloadComponents();
+    setAddingSeasoning(false);
+  }
+
   const lids = components.filter(c => c.category === 'lids');
   const bottles = components.filter(c => c.category === 'bottles');
   const labels = components.filter(c => c.category === 'labels');
+  const seasonings = components.filter(c => c.category === 'seasonings');
 
   const totalStock = products.reduce((sum, p) => sum + p.current_stock, 0);
   const lowStockCount = products.filter(p => p.current_stock < 15).length;
@@ -141,11 +160,20 @@ export default function Inventory({ onProductClick }: InventoryProps) {
       </div>
 
       <div className="card p-4 sm:p-6">
-        <div className="flex items-center gap-3 mb-4 sm:mb-6">
-          <div className="w-10 h-10 bg-[#1e3a5f] rounded-xl flex items-center justify-center">
-            <Package className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#1e3a5f] rounded-xl flex items-center justify-center">
+              <Package className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Components</h2>
           </div>
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900">Components</h2>
+          <button
+            onClick={() => setAddingSeasoning(true)}
+            className="btn-touch bg-emerald-700 text-white active:bg-emerald-800 text-sm px-3 sm:px-4"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add Seasoning
+          </button>
         </div>
 
         <div className="space-y-3 sm:space-y-4">
@@ -175,6 +203,15 @@ export default function Inventory({ onProductClick }: InventoryProps) {
             onPurchase={openPurchaseModal}
             onEdit={openEditModal}
           />
+
+          <ComponentSection
+            title="Seasonings"
+            items={seasonings}
+            expanded={expandedSections.includes('seasonings')}
+            onToggle={() => toggleSection('seasonings')}
+            onPurchase={openPurchaseModal}
+            onEdit={openEditModal}
+          />
         </div>
       </div>
 
@@ -191,6 +228,13 @@ export default function Inventory({ onProductClick }: InventoryProps) {
           component={editingComponent}
           onClose={closeEditModal}
           onSave={(values) => handleComponentUpdate(editingComponent.id, values)}
+        />
+      )}
+
+      {addingSeasoning && (
+        <AddSeasoningModal
+          onClose={() => setAddingSeasoning(false)}
+          onSave={handleSeasoningCreate}
         />
       )}
     </div>
@@ -234,6 +278,8 @@ interface ComponentSectionProps {
 function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit }: ComponentSectionProps) {
   const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalValue = items.reduce((sum, item) => sum + Number(item.total_value || 0), 0);
+  const categoryKey = title.toLowerCase();
+  const isSeasonings = categoryKey === 'seasonings';
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -255,7 +301,7 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit
         </div>
         <div className="flex items-center gap-3 sm:gap-4 text-right">
           <span className="text-xs sm:text-sm text-gray-500">
-            {totalUnits.toLocaleString()}
+            {totalUnits.toLocaleString()}{isSeasonings ? ' g' : ''}
           </span>
           <span className="text-xs sm:text-sm font-medium text-gray-700">
             ${totalValue.toFixed(0)}
@@ -274,22 +320,22 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="font-semibold text-gray-900 capitalize text-sm sm:text-base">
-                      {item.type.replace(/_/g, ' ')}
+                      {formatComponentType(item.type)}
                     </p>
                     <p className="text-xs text-gray-500">{title.slice(0, -1)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] sm:text-xs font-medium px-2 py-1 rounded-full ${
-                      item.quantity < 50
+                      item.quantity < getLowStockThreshold(item.category)
                         ? 'bg-yellow-100 text-yellow-700'
                         : 'bg-green-100 text-green-700'
                     }`}>
-                      {item.quantity < 50 ? 'Low' : 'Good'}
+                      {item.quantity < getLowStockThreshold(item.category) ? 'Low' : 'Good'}
                     </span>
                     <button
                       onClick={() => onEdit(item)}
                       className="p-2 rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors"
-                      aria-label={`Edit ${item.type.replace(/_/g, ' ')}`}
+                      aria-label={`Edit ${formatComponentType(item.type)}`}
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
@@ -298,12 +344,14 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit
 
                 <div className="space-y-2 mb-4 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Quantity</span>
-                    <span className="font-semibold text-gray-900">{item.quantity.toLocaleString()}</span>
+                    <span className="text-gray-500">{item.category === 'seasonings' ? 'Quantity (g)' : 'Quantity'}</span>
+                    <span className="font-semibold text-gray-900">
+                      {item.quantity.toLocaleString()}{item.category === 'seasonings' ? ' g' : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Unit Cost</span>
-                    <span className="font-semibold text-gray-900">${Number(item.average_cost || 0).toFixed(2)}</span>
+                    <span className="text-gray-500">{item.category === 'seasonings' ? 'Cost / g' : 'Unit Cost'}</span>
+                    <span className="font-semibold text-gray-900">{formatUnitCost(item)}</span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                     <span className="text-gray-500">Total Value</span>
@@ -316,7 +364,7 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit
                   className="w-full flex items-center justify-center gap-2 btn-touch bg-[#1e3a5f] text-white active:bg-[#2a4d78] text-sm"
                 >
                   <Plus className="w-4 h-4" />
-                  Add Purchase
+                  {item.category === 'seasonings' ? 'Add Purchase (lbs)' : 'Add Purchase'}
                 </button>
               </div>
             ))}
@@ -325,4 +373,33 @@ function ComponentSection({ title, items, expanded, onToggle, onPurchase, onEdit
       )}
     </div>
   );
+}
+
+function slugifyKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function formatComponentType(type: string) {
+  return type
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function getLowStockThreshold(category: string) {
+  if (category === 'seasonings') return 1000;
+  return 50;
+}
+
+function formatUnitCost(item: Component) {
+  const value = Number(item.average_cost || 0);
+  if (item.category === 'seasonings') {
+    return `$${value.toFixed(4)}`;
+  }
+  return `$${value.toFixed(2)}`;
 }

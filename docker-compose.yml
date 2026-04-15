@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: alpine:3.21
     container_name: flavor-junkie-db
     environment:
       POSTGRES_USER: postgres

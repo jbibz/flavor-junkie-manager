@@ -72,6 +72,14 @@ export interface ComponentUpdatePayload {
   total_value: number;
 }
 
+export interface ComponentCreatePayload {
+  category: 'lids' | 'bottles' | 'labels' | 'seasonings';
+  type: string;
+  quantity: number;
+  average_cost: number;
+  total_value: number;
+}
+
 export interface ComponentPurchasePayload {
   quantity: number;
   total_paid: number;
@@ -139,6 +147,8 @@ export const api = {
   },
   components: {
     getAll: () => fetchAPI<Component[]>('/components'),
+    create: (data: ComponentCreatePayload) =>
+      fetchAPI<Component>('/components', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: ComponentUpdatePayload) =>
       fetchAPI<Component>(`/components/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     addPurchase: (id: string, data: ComponentPurchasePayload) =>

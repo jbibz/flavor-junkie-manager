@@ -14,6 +14,19 @@ function parseDecimal(value: unknown) {
   return Number.isFinite(parsed) ? parsed : NaN;
 }
 
+function normalizeKey(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normalizeCategory(value: unknown) {
+  const category = normalizeKey(value);
+  return ['lids', 'bottles', 'labels', 'seasonings'].includes(category) ? category : '';
+}
+
 router.get('/', async (req, res) => {
   try {
     const result = await query(
@@ -23,6 +36,41 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error fetching components:', error);
     res.status(500).json({ error: 'Failed to fetch components' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const category = normalizeCategory(req.body?.category);
+    const type = normalizeKey(req.body?.type);
+    const quantity = parseInteger(req.body?.quantity);
+    const averageCost = parseDecimal(req.body?.average_cost);
+    const totalValue = parseDecimal(req.body?.total_value);
+
+    if (!category || !type) {
+      return res.status(400).json({ error: 'Category and type are required' });
+    }
+
+    if (!Number.isInteger(quantity) || quantity < 0 || !Number.isFinite(averageCost) || averageCost < 0 || !Number.isFinite(totalValue) || totalValue < 0) {
+      return res.status(400).json({ error: 'Quantity and costs must be 0 or greater' });
+    }
+
+    const result = await query(
+      `INSERT INTO components (category, type, quantity, average_cost, total_value)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [category, type, quantity, averageCost, totalValue]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating component:', error);
+
+    if ((error as { code?: string })?.code === '23505') {
+      return res.status(409).json({ error: 'A component with that category and name already exists' });
+    }
+
+    res.status(500).json({ error: 'Failed to create component' });
   }
 });
 

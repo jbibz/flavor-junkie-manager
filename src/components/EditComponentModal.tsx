@@ -16,7 +16,7 @@ interface EditComponentModalProps {
 
 export default function EditComponentModal({ component, onClose, onSave }: EditComponentModalProps) {
   const [quantity, setQuantity] = useState(component.quantity.toString());
-  const [averageCost, setAverageCost] = useState(formatNumber(component.average_cost));
+  const [averageCost, setAverageCost] = useState(formatNumber(component.average_cost, component.category === 'seasonings'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +29,7 @@ export default function EditComponentModal({ component, onClose, onSave }: EditC
 
   useEffect(() => {
     setQuantity(component.quantity.toString());
-    setAverageCost(formatNumber(component.average_cost));
+    setAverageCost(formatNumber(component.average_cost, component.category === 'seasonings'));
   }, [component]);
 
   const totalValue = calculateTotalValue(quantity, averageCost);
@@ -125,6 +125,7 @@ function ModalContent({
   onClose,
   onSubmit,
 }: ModalContentProps) {
+  const isSeasoning = component.category === 'seasonings';
   const componentName = component.type.charAt(0).toUpperCase() + component.type.slice(1).replace(/_/g, ' ');
   const categoryName = component.category.charAt(0).toUpperCase() + component.category.slice(1);
 
@@ -144,12 +145,14 @@ function ModalContent({
 
       <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
         <div className="grid grid-cols-2 gap-3">
-          <InfoTile label="Current Stock" value={component.quantity.toLocaleString()} />
-          <InfoTile label="Current Unit Cost" value={`$${formatNumber(component.average_cost)}`} />
+          <InfoTile label={isSeasoning ? 'Current Stock (g)' : 'Current Stock'} value={component.quantity.toLocaleString()} />
+          <InfoTile label={isSeasoning ? 'Current Cost / g' : 'Current Unit Cost'} value={`$${formatNumber(component.average_cost, isSeasoning)}`} />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Set Quantity</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {isSeasoning ? 'Set Quantity (g)' : 'Set Quantity'}
+          </label>
           <input
             type="number"
             inputMode="numeric"
@@ -161,14 +164,16 @@ function ModalContent({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Set Average Unit Cost</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {isSeasoning ? 'Set Cost per Gram' : 'Set Average Unit Cost'}
+          </label>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
             <input
               type="number"
               inputMode="decimal"
               min="0"
-              step="0.01"
+              step={isSeasoning ? '0.0001' : '0.01'}
               value={averageCost}
               onChange={(e) => setAverageCost(e.target.value)}
               className="input-touch pl-8"
@@ -179,7 +184,9 @@ function ModalContent({
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">New Stock Level</span>
-            <span className="font-semibold text-gray-900">{Number(quantity || 0).toLocaleString()}</span>
+            <span className="font-semibold text-gray-900">
+              {Number(quantity || 0).toLocaleString()}{isSeasoning ? ' g' : ''}
+            </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-600">Projected Inventory Value</span>
@@ -237,9 +244,10 @@ function calculateTotalValue(quantity: string, averageCost: string) {
   return Number((qty * cost).toFixed(2));
 }
 
-function formatNumber(value: number) {
+function formatNumber(value: number, highPrecision = false) {
   if (value === undefined || value === null) return '0';
   const formatted = Number(value);
   if (Number.isNaN(formatted)) return '0';
+  if (highPrecision) return formatted.toFixed(4);
   return Number.isInteger(formatted) ? formatted.toString() : formatted.toFixed(2);
 }

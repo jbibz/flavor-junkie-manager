@@ -56,7 +56,17 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
     const lidComponent = components.find(c => c.category === 'lids' && c.type === lidKey);
     const bottleComponent = components.find(c => c.category === 'bottles' && c.type === bottleKey);
     const labelComponent = findLabelComponent(product, components);
+    const seasoningComponents = components.filter((component) => component.category === 'seasonings');
     const labelKey = labelComponent?.type ?? getProductLabelCandidates(product)[0];
+    const scaledIngredientUsage = buildIngredientUsage(scaledRecipe.ingredients, seasoningComponents);
+    const missingSeasonings = Array.from(
+      new Set(
+        scaledIngredientUsage
+          .filter((entry) => !entry.component)
+          .map((entry) => entry.ingredient.name)
+      )
+    );
+    const seasoningTotals = aggregateSeasoningUsage(scaledIngredientUsage);
 
     if (!lidComponent || !bottleComponent || !labelComponent) {
       showToast?.('error', 'Missing component data');
@@ -70,7 +80,31 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
       return;
     }
 
+    if (missingSeasonings.length > 0) {
+      showToast?.('error', `Missing seasoning mappings: ${missingSeasonings.join(', ')}`);
+      setMakingBatch(false);
+      return;
+    }
+
+    const insufficientSeasonings = seasoningTotals.filter((entry) => entry.component.quantity < entry.grams);
+    if (insufficientSeasonings.length > 0) {
+      showToast?.(
+        'error',
+        `Insufficient seasonings in stock: ${insufficientSeasonings
+          .map((entry) => `${displayComponentType(entry.component.type)} (${entry.component.quantity}g/${entry.grams}g)`)
+          .join(', ')}`
+      );
+      setMakingBatch(false);
+      return;
+    }
+
     try {
+      const seasoningSummary = seasoningTotals.length
+        ? seasoningTotals
+            .map((entry) => `${displayComponentType(entry.component.type)}: ${entry.grams}g`)
+            .join(', ')
+        : 'None';
+
       await api.production.create({
         production_date: new Date().toISOString().split('T')[0],
         product_id: product.id,
@@ -79,13 +113,18 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
         components_used: {
           lids: `${lidKey}: ${desired}`,
           bottles: `${bottleKey}: ${desired}`,
-          labels: `${labelKey}: ${desired}`
+          labels: `${labelKey}: ${desired}`,
+          seasonings: seasoningSummary
         },
         notes: '',
         component_adjustments: [
           { component_id: lidComponent.id, quantity_delta: -desired },
           { component_id: bottleComponent.id, quantity_delta: -desired },
           { component_id: labelComponent.id, quantity_delta: -desired },
+          ...seasoningTotals.map((entry) => ({
+            component_id: entry.component.id,
+            quantity_delta: -entry.grams,
+          })),
         ],
       });
 
@@ -127,12 +166,25 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
   const lidComponent = components.find(c => c.category === 'lids' && c.type === product.lid_color.toLowerCase());
   const bottleComponent = components.find(c => c.category === 'bottles' && c.type === product.bottle_type.toLowerCase());
   const labelComponent = findLabelComponent(product, components);
+  const seasoningComponents = components.filter((component) => component.category === 'seasonings');
+  const ingredientUsage = buildIngredientUsage(ingredients, seasoningComponents);
+  const missingIngredientMappings = Array.from(
+    new Set(
+      ingredientUsage
+        .filter((entry) => !entry.component)
+        .map((entry) => entry.ingredient.name)
+    )
+  );
 
   const lidAverageCost = asNumber(lidComponent?.average_cost);
   const bottleAverageCost = asNumber(bottleComponent?.average_cost);
+  const labelAverageCost = labelComponent ? asNumber(labelComponent.average_cost) : 0.3;
   const productPrice = asNumber(product.price);
-  const componentCost = lidAverageCost + bottleAverageCost + 0.30;
-  const ingredientCost = 1.50;
+  const componentCost = lidAverageCost + bottleAverageCost + labelAverageCost;
+  const ingredientCost = ingredientUsage.reduce((sum, entry) => {
+    if (!entry.component) return sum;
+    return sum + entry.grams * asNumber(entry.component.average_cost);
+  }, 0);
   const totalCost = componentCost + ingredientCost;
   const grossProfit = productPrice - totalCost;
   const profitMargin = productPrice > 0 ? (grossProfit / productPrice) * 100 : 0;
@@ -271,6 +323,17 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
                         </span>
                       </div>
                     ))}
+                    <div className="flex justify-between items-center text-sm pt-2 border-t border-orange-200">
+                      <span className="text-gray-700">Estimated Raw Material Cost</span>
+                      <span className="font-semibold text-orange-700">
+                        ${buildIngredientUsage(scaledRecipe.ingredients, seasoningComponents)
+                          .reduce((sum, entry) => {
+                            if (!entry.component) return sum;
+                            return sum + entry.grams * asNumber(entry.component.average_cost);
+                          }, 0)
+                          .toFixed(2)}
+                      </span>
+                    </div>
                     <div className="pt-3 border-t border-orange-200">
                       <button
                         onClick={makeBatch}
@@ -340,7 +403,7 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Label</span>
-                <span className="text-gray-900">$0.30</span>
+                <span className="text-gray-900">${labelAverageCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-semibold pt-2 border-t border-gray-100">
                 <span className="text-gray-900">Total Packaging</span>
@@ -363,6 +426,11 @@ export default function ProductDetail({ productId, onBack, showToast }: ProductD
                 <span className="text-gray-600">Ingredients</span>
                 <span className="text-gray-900">${ingredientCost.toFixed(2)}</span>
               </div>
+              {missingIngredientMappings.length > 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  Missing seasoning cost mapping for: {missingIngredientMappings.join(', ')}
+                </p>
+              )}
               <div className="flex justify-between font-semibold pt-2 border-t border-gray-100">
                 <span className="text-gray-900">Total Cost</span>
                 <span className="text-gray-900">${totalCost.toFixed(2)}</span>
@@ -472,6 +540,95 @@ function findLabelComponent(product: Product, components: Component[]) {
   }
 
   return labels.find((label) => candidates.some((candidate) => label.type.includes(candidate))) ?? null;
+}
+
+interface IngredientUsage {
+  ingredient: RecipeIngredient;
+  grams: number;
+  component: Component | null;
+}
+
+interface SeasoningUsageTotal {
+  component: Component;
+  grams: number;
+}
+
+function buildIngredientUsage(ingredients: RecipeIngredient[], seasoningComponents: Component[]): IngredientUsage[] {
+  return ingredients.map((ingredient) => {
+    const grams = ingredientAmountToGrams(ingredient.amount, ingredient.unit);
+    return {
+      ingredient,
+      grams,
+      component: findSeasoningComponent(ingredient.name, seasoningComponents),
+    };
+  });
+}
+
+function aggregateSeasoningUsage(usage: IngredientUsage[]): SeasoningUsageTotal[] {
+  const totals = new Map<string, SeasoningUsageTotal>();
+
+  for (const entry of usage) {
+    if (!entry.component || entry.grams <= 0) continue;
+    const existing = totals.get(entry.component.id);
+    if (existing) {
+      existing.grams += entry.grams;
+      continue;
+    }
+    totals.set(entry.component.id, { component: entry.component, grams: entry.grams });
+  }
+
+  return Array.from(totals.values());
+}
+
+function findSeasoningComponent(ingredientName: string, components: Component[]) {
+  const ingredientKey = canonicalIngredientKey(ingredientName);
+  if (!ingredientKey) return null;
+
+  const exact = components.find((component) => canonicalIngredientKey(component.type) === ingredientKey);
+  if (exact) return exact;
+
+  return components.find((component) => {
+    const componentKey = canonicalIngredientKey(component.type);
+    return componentKey.includes(ingredientKey) || ingredientKey.includes(componentKey);
+  }) ?? null;
+}
+
+function normalizeIngredientKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function canonicalIngredientKey(value: string) {
+  const synonymMap: Record<string, string> = {
+    granulated: 'powder',
+    granules: 'powder',
+    dried: '',
+  };
+
+  return normalizeIngredientKey(value)
+    .split('_')
+    .map((token) => synonymMap[token] ?? token)
+    .filter(Boolean)
+    .sort()
+    .join('_');
+}
+
+function ingredientAmountToGrams(amount: number, unit: string) {
+  const normalizedUnit = String(unit || '').toLowerCase();
+  if (normalizedUnit === 'lb' || normalizedUnit === 'lbs' || normalizedUnit === 'pound' || normalizedUnit === 'pounds') {
+    return Math.round(amount * 453.592);
+  }
+  return Math.round(amount);
+}
+
+function displayComponentType(type: string) {
+  return type
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 interface MaterialStockRowProps {
